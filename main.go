@@ -484,35 +484,30 @@ func sendDataHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Configuration JSON file/URL required")
-		os.Exit(1)
-	}
-
 	var configBytes []byte
 	var err error
 
-	if strings.HasPrefix(os.Args[1], "http://") || strings.HasPrefix(os.Args[1], "https://") {
-		configResponse, err := http.Get(os.Args[1])
+	if len(os.Args) < 2 || os.Args[1] == "-" {
+		configBytes, err = io.ReadAll(os.Stdin)
+	} else if strings.HasPrefix(os.Args[1], "http://") || strings.HasPrefix(os.Args[1], "https://") {
+		r, err := http.Get(os.Args[1])
 		if err != nil {
 			panic(err)
 		}
 
-		defer configResponse.Body.Close()
+		defer r.Body.Close()
 
-		if configResponse.StatusCode != http.StatusOK {
-			return
+		if r.StatusCode != http.StatusOK {
+			os.Exit(1)
 		}
 
-		configBytes, err = io.ReadAll(configResponse.Body)
-		if err != nil {
-			panic(err)
-		}
+		configBytes, err = io.ReadAll(r.Body)
 	} else {
 		configBytes, err = os.ReadFile(os.Args[1])
-		if err != nil {
-			panic(err)
-		}
+	}
+
+	if err != nil {
+		panic(err)
 	}
 
 	err = json.Unmarshal(configBytes, &config)
@@ -520,8 +515,7 @@ func main() {
 		panic(err)
 	}
 
-	if len(config.Ports) == 0 {
-		fmt.Println("At least one port is required")
+	if config.Address == "" || len(config.Ports) == 0 {
 		os.Exit(1)
 	}
 
