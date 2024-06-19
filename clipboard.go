@@ -41,7 +41,7 @@ func setClipboard(ps *portState, text string, sequence uint64, paste bool) bool 
 	if err != nil {
 		return false
 	}
-	if n != 2 {
+	if n != len(data) {
 		return false
 	}
 
