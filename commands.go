@@ -502,7 +502,7 @@ func runCommand(ps *portState, port int, command []string) int {
 			var sequence uint64
 			var err error
 
-			if len(command) == 3 {
+			if len(command) == 3 && command[2] != "" {
 				sequence, err = strconv.ParseUint(command[2], 10, 64)
 				if err != nil {
 					return http.StatusBadRequest
