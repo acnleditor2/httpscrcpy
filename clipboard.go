@@ -82,9 +82,13 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			if user == nil {
 				return
 			}
-			if user.ScriptOnly {
-				w.WriteHeader(http.StatusForbidden)
-				return
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 			}
 		}
 
@@ -157,9 +161,13 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			if user == nil {
 				return
 			}
-			if user.ScriptOnly {
-				w.WriteHeader(http.StatusForbidden)
-				return
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 			}
 		}
 
@@ -249,9 +257,13 @@ func clipboardStreamHandler(w http.ResponseWriter, req *http.Request) {
 			if user == nil {
 				return
 			}
-			if user.ScriptOnly {
-				w.WriteHeader(http.StatusForbidden)
-				return
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 			}
 		}
 

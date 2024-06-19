@@ -42,9 +42,13 @@ func videoStreamHandler(w http.ResponseWriter, req *http.Request) {
 			if user == nil {
 				return
 			}
-			if user.ScriptOnly {
-				w.WriteHeader(http.StatusForbidden)
-				return
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 			}
 		}
 
@@ -61,8 +65,6 @@ func videoStreamHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		network := query.Get("network")
-		address := query.Get("address")
 		stripHeader := true
 		var err error
 
@@ -85,6 +87,8 @@ func videoStreamHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		network := query.Get("network")
+		address := query.Get("address")
 		var sendSocket net.Conn
 
 		if address != "" {

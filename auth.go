@@ -6,7 +6,6 @@ type User struct {
 	Password       string   `json:"password"`
 	AllowedPorts   []int    `json:"allowedPorts"`
 	AllowedScripts []string `json:"allowedScripts"`
-	ScriptOnly     bool     `json:"scriptOnly"`
 }
 
 func portAllowedForUser(port int, username string) bool {

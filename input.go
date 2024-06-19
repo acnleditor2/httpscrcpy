@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -289,9 +288,13 @@ func keyHandler(w http.ResponseWriter, req *http.Request) {
 			if user == nil {
 				return
 			}
-			if user.ScriptOnly {
-				w.WriteHeader(http.StatusForbidden)
-				return
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 			}
 		}
 
@@ -432,9 +435,13 @@ func typeHandler(w http.ResponseWriter, req *http.Request) {
 			if user == nil {
 				return
 			}
-			if user.ScriptOnly {
-				w.WriteHeader(http.StatusForbidden)
-				return
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 			}
 		}
 
@@ -451,8 +458,6 @@ func typeHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		text := query.Get("text")
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -464,7 +469,7 @@ func typeHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		w.WriteHeader(runCommand(ps, port, []string{"type", text}))
+		w.WriteHeader(runCommand(ps, port, []string{"type", query.Get("text")}))
 	default:
 		if origin != "" {
 			w.Header().Set("Vary", "Origin")
@@ -509,9 +514,13 @@ func touchHandler(w http.ResponseWriter, req *http.Request) {
 			if user == nil {
 				return
 			}
-			if user.ScriptOnly {
-				w.WriteHeader(http.StatusForbidden)
-				return
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 			}
 		}
 
@@ -547,7 +556,7 @@ func touchHandler(w http.ResponseWriter, req *http.Request) {
 		if req.URL.Path == "/touch" {
 			w.WriteHeader(runCommand(ps, port, []string{"touch", x, y, width, height, query.Get("duration")}))
 		} else {
-			w.WriteHeader(runCommand(ps, port, []string{fmt.Sprintf("touch%s", req.URL.Path[7:]), x, y, width, height}))
+			w.WriteHeader(runCommand(ps, port, []string{"touch" + req.URL.Path[7:], x, y, width, height}))
 		}
 	default:
 		if origin != "" {
@@ -593,9 +602,13 @@ func mouseHandler(w http.ResponseWriter, req *http.Request) {
 			if user == nil {
 				return
 			}
-			if user.ScriptOnly {
-				w.WriteHeader(http.StatusForbidden)
-				return
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 			}
 		}
 
@@ -632,7 +645,7 @@ func mouseHandler(w http.ResponseWriter, req *http.Request) {
 		if req.URL.Path == "/mouse-click" {
 			w.WriteHeader(runCommand(ps, port, []string{"mouseclick", button, x, y, width, height, query.Get("duration")}))
 		} else {
-			w.WriteHeader(runCommand(ps, port, []string{fmt.Sprintf("mouse%s", req.URL.Path[7:]), button, x, y, width, height}))
+			w.WriteHeader(runCommand(ps, port, []string{"mouse" + req.URL.Path[7:], button, x, y, width, height}))
 		}
 	default:
 		if origin != "" {
@@ -678,9 +691,13 @@ func scrollHandler(w http.ResponseWriter, req *http.Request) {
 			if user == nil {
 				return
 			}
-			if user.ScriptOnly {
-				w.WriteHeader(http.StatusForbidden)
-				return
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 			}
 		}
 
@@ -708,7 +725,7 @@ func scrollHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		w.WriteHeader(runCommand(ps, port, []string{fmt.Sprintf("scroll%s", req.URL.Path[8:]), query.Get("x"), query.Get("y"), query.Get("width"), query.Get("height")}))
+		w.WriteHeader(runCommand(ps, port, []string{"scroll" + req.URL.Path[8:], query.Get("x"), query.Get("y"), query.Get("width"), query.Get("height")}))
 	default:
 		if origin != "" {
 			w.Header().Set("Vary", "Origin")
