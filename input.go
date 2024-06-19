@@ -353,7 +353,7 @@ func keyHandler(w http.ResponseWriter, req *http.Request) {
 
 		var duration time.Duration
 
-		if req.URL.Path == "/key" && query.Has("duration") {
+		if (keyInPath || req.URL.Path == "/key") && query.Has("duration") {
 			duration, err = time.ParseDuration(query.Get("duration"))
 			if err != nil {
 				w.WriteHeader(http.StatusBadRequest)
