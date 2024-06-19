@@ -741,6 +741,7 @@ func main() {
 	http.HandleFunc("/video-codec", portInfoHandler)
 	http.HandleFunc("/audio-codec", portInfoHandler)
 	http.HandleFunc("/allowed-ports", allowedPortsHandler)
+	http.HandleFunc("/send-data", sendDataHandler)
 	http.HandleFunc("/video", videoStreamHandler)
 	http.HandleFunc("/audio", audioStreamHandler)
 	http.HandleFunc("/clipboard", clipboardStreamHandler)
