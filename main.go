@@ -56,9 +56,9 @@ type Config struct {
 	Endpoints     map[string][]string `json:"endpoints"`
 }
 
+var config Config
 var portMap = map[int]*portState{}
 var endpointMap = map[string]map[string]struct{}{}
-var config Config
 
 func getPort(portString string) int {
 	if portString == "" && len(portMap) == 1 {
