@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -68,7 +67,7 @@ func getScriptTemplate(scriptName string) (*template.Template, error) {
 			out, _ := exec.Command(c[0], c[1:]...).Output()
 			return strings.TrimSpace(string(out))
 		},
-		"httpGet": func(url string) string {
+		"httpget": func(url string) string {
 			response, err := http.Get(url)
 			if err != nil {
 				return ""
@@ -83,7 +82,7 @@ func getScriptTemplate(scriptName string) (*template.Template, error) {
 
 			return strings.TrimSpace(string(responseBodyBytes))
 		},
-		"readFile": func(path string) string {
+		"readfile": func(path string) string {
 			fileBytes, err := os.ReadFile(path)
 			if err != nil {
 				return ""
@@ -91,11 +90,7 @@ func getScriptTemplate(scriptName string) (*template.Template, error) {
 
 			return strings.TrimSpace(string(fileBytes))
 		},
-		"exists": func(path string) bool {
-			_, err := os.Stat(path)
-			return err == nil
-		},
-		"getSize": func(path string) int {
+		"getsize": func(path string) int {
 			fi, err := os.Stat(path)
 			if err != nil {
 				return -1
@@ -103,11 +98,7 @@ func getScriptTemplate(scriptName string) (*template.Template, error) {
 
 			return int(fi.Size())
 		},
-		"glob": func(pattern string) []string {
-			matches, _ := filepath.Glob(pattern)
-			return matches
-		},
-		"getWd": func() string {
+		"getwd": func() string {
 			wd, err := os.Getwd()
 			if err != nil {
 				return ""
@@ -115,127 +106,37 @@ func getScriptTemplate(scriptName string) (*template.Template, error) {
 
 			return wd
 		},
-		"executable": func() string {
-			executable, err := os.Executable()
-			if err != nil {
-				return ""
-			}
-
-			return executable
-		},
-		"stringToBase64": func(text string) string {
-			return base64.StdEncoding.EncodeToString([]byte(text))
-		},
-		"base64ToString": func(encoded string) string {
-			decoded, err := base64.StdEncoding.DecodeString(encoded)
-			if err != nil {
-				return ""
-			}
-
-			return string(decoded)
-		},
-		"stringToBase64Url": func(text string) string {
-			return base64.URLEncoding.EncodeToString([]byte(text))
-		},
-		"base64UrlToString": func(encoded string) string {
-			decoded, err := base64.URLEncoding.DecodeString(encoded)
-			if err != nil {
-				return ""
-			}
-
-			return string(decoded)
-		},
-		"stringToHex": func(text string) string {
-			return hex.EncodeToString([]byte(text))
-		},
-		"hexToString": func(encoded string) string {
-			decoded, err := hex.DecodeString(encoded)
-			if err != nil {
-				return ""
-			}
-
-			return string(decoded)
-		},
-		"convert": func(input string, fromEncoding int, toEncoding int) string {
-			var decoded []byte
-			var err error
-
-			switch fromEncoding {
-			case 0:
-				decoded, err = base64.StdEncoding.DecodeString(input)
-				if err != nil {
-					return ""
-				}
-			case 1:
-				decoded, err = base64.URLEncoding.DecodeString(input)
-				if err != nil {
-					return ""
-				}
-			case 2:
-				decoded, err = hex.DecodeString(input)
-				if err != nil {
-					return ""
-				}
-			default:
-				return ""
-			}
-
-			switch toEncoding {
-			case 0:
-				return base64.StdEncoding.EncodeToString(decoded)
-			case 1:
-				return base64.URLEncoding.EncodeToString(decoded)
-			case 2:
-				return hex.EncodeToString(decoded)
-			}
-
-			return ""
-		},
-		"getTime": func() string {
+		"gettime": func() string {
 			return strconv.FormatInt(time.Now().Unix(), 10)
 		},
-		"abs":                filepath.Abs,
-		"base":               filepath.Base,
-		"dir":                filepath.Dir,
-		"ext":                filepath.Ext,
-		"isAbs":              filepath.IsAbs,
-		"getEnv":             os.Getenv,
-		"urlDecode":          url.QueryUnescape,
-		"stringContains":     strings.Contains,
-		"stringContainsAny":  strings.ContainsAny,
-		"stringCount":        strings.Count,
-		"stringFields":       strings.Fields,
-		"stringHasPrefix":    strings.HasPrefix,
-		"stringHasSuffix":    strings.HasSuffix,
-		"stringIndex":        strings.Index,
-		"stringIndexAny":     strings.IndexAny,
-		"stringLastIndex":    strings.LastIndex,
-		"stringLastIndexAny": strings.LastIndexAny,
-		"repeatString":       strings.Repeat,
-		"stringReplaceAll":   strings.ReplaceAll,
-		"splitString":        strings.Split,
-		"splitStringAfter":   strings.SplitAfter,
-		"splitStringAfterN":  strings.SplitAfterN,
-		"splitStringN":       strings.SplitN,
-		"stringToLower":      strings.ToLower,
-		"stringToUpper":      strings.ToUpper,
-		"stringTrim":         strings.Trim,
-		"stringTrimLeft":     strings.TrimLeft,
-		"stringTrimPrefix":   strings.TrimPrefix,
-		"stringTrimRight":    strings.TrimRight,
-		"stringTrimSpace":    strings.TrimSpace,
-		"stringTrimSuffix":   strings.TrimSuffix,
-		"atoi":               strconv.Atoi,
-		"itoa":               strconv.Itoa,
-		"parseBool":          strconv.ParseBool,
+		"getenv":    os.Getenv,
+		"atoi":      strconv.Atoi,
+		"parsebool": strconv.ParseBool,
+		"fpabs":     filepath.Abs,
+		"fpbase":    filepath.Base,
+		"fpdir":     filepath.Dir,
+		"fpext":     filepath.Ext,
+		"fpglob": func(pattern string) []string {
+			matches, _ := filepath.Glob(pattern)
+			return matches
+		},
+		"strcontains":   strings.Contains,
+		"strcount":      strings.Count,
+		"strfields":     strings.Fields,
+		"strhasprefix":  strings.HasPrefix,
+		"strhassuffix":  strings.HasSuffix,
+		"strindex":      strings.Index,
+		"strlastindex":  strings.LastIndex,
+		"strrepeat":     strings.Repeat,
+		"strreplaceall": strings.ReplaceAll,
+		"strsplit":      strings.Split,
+		"strtolower":    strings.ToLower,
+		"strtoupper":    strings.ToUpper,
+		"strtrimspace":  strings.TrimSpace,
 	}).Parse(string(scriptBytes))
 }
 
 func runScript(name string, username string, port int) int {
-	if len(config.Users) > 0 && !scriptAllowedForUser(name, username) {
-		return -1
-	}
-
 	var message string
 	var err error
 
@@ -347,6 +248,10 @@ func runScript(name string, username string, port int) int {
 			}
 		case "runscript":
 			if len(command) == 2 {
+				if len(config.Users) > 0 && !scriptAllowedForUser(command[1], username) {
+					return -1
+				}
+
 				newPort := runScript(command[1], username, port)
 				if newPort == -1 {
 					return -1
@@ -355,6 +260,10 @@ func runScript(name string, username string, port int) int {
 					ps = portMap[newPort]
 				}
 			} else if len(command) == 3 {
+				if len(config.Users) > 0 && !scriptAllowedForUser(command[1], username) {
+					return -1
+				}
+
 				d, err := time.ParseDuration(command[2])
 				if err != nil {
 					return -1
@@ -605,7 +514,8 @@ func scriptHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
 
-		script := req.URL.Query().Get("script")
+		query := req.URL.Query()
+		script := query.Get("script")
 		var username string
 		var user *User
 
@@ -614,9 +524,33 @@ func scriptHandler(w http.ResponseWriter, req *http.Request) {
 			if user == nil {
 				return
 			}
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+			}
+			if !scriptAllowedForUser(script, username) {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
 		}
 
-		go runScript(script, username, 0)
+		if query.Has("after") {
+			d, err := time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			time.AfterFunc(d, func() {
+				runScript(script, username, 0)
+			})
+		} else {
+			go runScript(script, username, 0)
+		}
 
 		w.WriteHeader(http.StatusNoContent)
 	default:
@@ -663,10 +597,27 @@ func scriptMessageHandler(w http.ResponseWriter, req *http.Request) {
 			if user == nil {
 				return
 			}
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+			}
 			if !scriptAllowedForUser(script, username) {
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
+		}
+
+		if query.Has("after") {
+			after, err := time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			time.Sleep(after)
 		}
 
 		w.WriteHeader(runCommand(nil, 0, []string{"scriptmessage", script, query.Get("message")}))

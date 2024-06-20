@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 func getClipboard(ps *portState, cut bool) bool {
@@ -105,6 +106,17 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -114,6 +126,10 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control || ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"getclipboard", query.Get("cut")}))
@@ -195,6 +211,16 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
+		var after time.Duration
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -207,6 +233,10 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 		}
 
 		text := query.Get("text")
+
+		if after > 0 {
+			time.Sleep(after)
+		}
 
 		if paste {
 			w.WriteHeader(runCommand(ps, port, []string{"setclipboardpaste", text, query.Get("sequence")}))

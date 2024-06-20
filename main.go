@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 )
 
 type portState struct {
@@ -483,6 +484,17 @@ func sendDataHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -492,6 +504,10 @@ func sendDataHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control || ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"senddata", query.Get("data")}))
@@ -562,6 +578,17 @@ func backOrScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -571,6 +598,10 @@ func backOrScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control || ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"backorscreenon"}))
@@ -641,6 +672,17 @@ func expandNotificationsPanelHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -650,6 +692,10 @@ func expandNotificationsPanelHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control || ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"expandnotificationspanel"}))
@@ -720,6 +766,17 @@ func expandSettingsPanelHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -729,6 +786,10 @@ func expandSettingsPanelHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control || ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"expandsettingspanel"}))
@@ -799,6 +860,17 @@ func collapsePanelsHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -808,6 +880,10 @@ func collapsePanelsHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control || ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"collapsepanels"}))
@@ -878,6 +954,17 @@ func turnScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -887,6 +974,10 @@ func turnScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control || ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"turnscreenon"}))
@@ -957,6 +1048,17 @@ func turnScreenOffHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -966,6 +1068,10 @@ func turnScreenOffHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control || ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"turnscreenoff"}))
@@ -1036,6 +1142,17 @@ func rotateHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -1045,6 +1162,10 @@ func rotateHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control || ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"rotate"}))
@@ -1065,18 +1186,18 @@ func main() {
 	if len(os.Args) < 2 || os.Args[1] == "-" {
 		configBytes, err = io.ReadAll(os.Stdin)
 	} else if strings.HasPrefix(os.Args[1], "http://") || strings.HasPrefix(os.Args[1], "https://") {
-		r, err := http.Get(os.Args[1])
+		response, err := http.Get(os.Args[1])
 		if err != nil {
 			panic(err)
 		}
 
-		defer r.Body.Close()
-
-		if r.StatusCode != http.StatusOK {
+		if response.StatusCode != http.StatusOK {
+			response.Body.Close()
 			os.Exit(1)
 		}
 
-		configBytes, err = io.ReadAll(r.Body)
+		configBytes, err = io.ReadAll(response.Body)
+		response.Body.Close()
 	} else {
 		configBytes, err = os.ReadFile(os.Args[1])
 	}

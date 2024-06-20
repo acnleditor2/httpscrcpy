@@ -361,6 +361,16 @@ func keyHandler(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
+		var after time.Duration
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -370,6 +380,10 @@ func keyHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control || ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
 		}
 
 		if req.URL.Path != "/key-up" {
@@ -458,6 +472,17 @@ func typeHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -467,6 +492,10 @@ func typeHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control || ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"type", query.Get("text")}))
@@ -537,6 +566,17 @@ func touchHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -552,6 +592,10 @@ func touchHandler(w http.ResponseWriter, req *http.Request) {
 		y := query.Get("y")
 		width := query.Get("width")
 		height := query.Get("height")
+
+		if after > 0 {
+			time.Sleep(after)
+		}
 
 		if req.URL.Path == "/touch" {
 			w.WriteHeader(runCommand(ps, port, []string{"touch", x, y, width, height, query.Get("duration")}))
@@ -625,6 +669,17 @@ func mouseHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -641,6 +696,10 @@ func mouseHandler(w http.ResponseWriter, req *http.Request) {
 		y := query.Get("y")
 		width := query.Get("width")
 		height := query.Get("height")
+
+		if after > 0 {
+			time.Sleep(after)
+		}
 
 		if req.URL.Path == "/mouse-click" {
 			w.WriteHeader(runCommand(ps, port, []string{"mouseclick", button, x, y, width, height, query.Get("duration")}))
@@ -714,6 +773,17 @@ func scrollHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		var after time.Duration
+		var err error
+
+		if query.Has("after") {
+			after, err = time.ParseDuration(query.Get("after"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -723,6 +793,10 @@ func scrollHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control || ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"scroll" + req.URL.Path[8:], query.Get("x"), query.Get("y"), query.Get("width"), query.Get("height")}))
