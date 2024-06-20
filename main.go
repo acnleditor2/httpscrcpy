@@ -1740,17 +1740,19 @@ func main() {
 		}
 	}
 
-	{
-		endpoint, ok := endpointMap["/script"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/script", scriptHandler)
+	if len(config.Scripts) > 0 {
+		{
+			endpoint, ok := endpointMap["/script"]
+			if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
+				http.HandleFunc("/script", scriptHandler)
+			}
 		}
-	}
 
-	{
-		endpoint, ok := endpointMap["/script-message"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/script-message", scriptMessageHandler)
+		{
+			endpoint, ok := endpointMap["/script-message"]
+			if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
+				http.HandleFunc("/script-message", scriptMessageHandler)
+			}
 		}
 	}
 
