@@ -11,7 +11,7 @@ import (
 )
 
 func runCommand(ps *portState, port int, command []string) int {
-	commandName := strings.ToLower(command[0])
+	commandName := command[0]
 
 	switch commandName {
 	case "connect":
@@ -68,29 +68,34 @@ func runCommand(ps *portState, port int, command []string) int {
 		} else {
 			return http.StatusBadRequest
 		}
-	case "type", "typebase64", "typebase64url":
+	case "type", "typebase64", "typebase64url", "typehex":
 		if len(command) == 2 {
-			text := command[1]
-			if text == "" {
+			if command[1] == "" {
 				return http.StatusBadRequest
 			}
 
-			var err error
+			var text string
 
 			if commandName == "typebase64" {
 				textBytes, err := base64.StdEncoding.DecodeString(command[1])
 				if err != nil {
 					return http.StatusBadRequest
 				}
-
 				text = string(textBytes)
 			} else if commandName == "typebase64url" {
 				textBytes, err := base64.URLEncoding.DecodeString(command[1])
 				if err != nil {
 					return http.StatusBadRequest
 				}
-
 				text = string(textBytes)
+			} else if commandName == "typehex" {
+				textBytes, err := hex.DecodeString(command[1])
+				if err != nil {
+					return http.StatusBadRequest
+				}
+				text = string(textBytes)
+			} else {
+				text = command[1]
 			}
 
 			data := make([]byte, 5+len(text))
@@ -131,6 +136,7 @@ func runCommand(ps *portState, port int, command []string) int {
 			}
 
 			var duration time.Duration
+
 			if len(command) == 6 && command[5] != "" {
 				duration, err = time.ParseDuration(command[5])
 				if err != nil {
@@ -477,7 +483,7 @@ func runCommand(ps *portState, port int, command []string) int {
 		} else {
 			return http.StatusBadRequest
 		}
-	case "setclipboard", "setclipboardbase64", "setclipboardbase64url", "setclipboardpaste", "setclipboardpastebase64", "setclipboardpastebase64url":
+	case "setclipboard", "setclipboardbase64", "setclipboardbase64url", "setclipboardhex", "setclipboardpaste", "setclipboardpastebase64", "setclipboardpastebase64url", "setclipboardpastehex":
 		if len(command) == 2 || len(command) == 3 {
 			var text string
 
@@ -486,14 +492,18 @@ func runCommand(ps *portState, port int, command []string) int {
 				if err != nil {
 					return http.StatusBadRequest
 				}
-
 				text = string(decoded)
 			} else if strings.HasSuffix(commandName, "base64url") {
 				decoded, err := base64.URLEncoding.DecodeString(command[1])
 				if err != nil {
 					return http.StatusBadRequest
 				}
-
+				text = string(decoded)
+			} else if strings.HasSuffix(commandName, "hex") {
+				decoded, err := hex.DecodeString(command[1])
+				if err != nil {
+					return http.StatusBadRequest
+				}
 				text = string(decoded)
 			} else {
 				text = command[1]

@@ -8,9 +8,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"text/template"
@@ -106,33 +108,142 @@ func getScriptTemplate(scriptName string) (*template.Template, error) {
 
 			return wd
 		},
+		"getenv": os.Getenv,
 		"gettime": func() string {
 			return strconv.FormatInt(time.Now().Unix(), 10)
 		},
-		"getenv":    os.Getenv,
-		"atoi":      strconv.Atoi,
-		"parsebool": strconv.ParseBool,
-		"fpabs":     filepath.Abs,
-		"fpbase":    filepath.Base,
-		"fpdir":     filepath.Dir,
-		"fpext":     filepath.Ext,
+		"atoi":   strconv.Atoi,
+		"fpabs":  filepath.Abs,
+		"fpbase": filepath.Base,
+		"fpdir":  filepath.Dir,
+		"fpext":  filepath.Ext,
 		"fpglob": func(pattern string) []string {
 			matches, _ := filepath.Glob(pattern)
 			return matches
 		},
-		"strcontains":   strings.Contains,
-		"strcount":      strings.Count,
-		"strfields":     strings.Fields,
-		"strhasprefix":  strings.HasPrefix,
-		"strhassuffix":  strings.HasSuffix,
-		"strindex":      strings.Index,
-		"strlastindex":  strings.LastIndex,
-		"strrepeat":     strings.Repeat,
-		"strreplaceall": strings.ReplaceAll,
-		"strsplit":      strings.Split,
-		"strtolower":    strings.ToLower,
-		"strtoupper":    strings.ToUpper,
-		"strtrimspace":  strings.TrimSpace,
+		"strtolower":   strings.ToLower,
+		"strtoupper":   strings.ToUpper,
+		"strtrimspace": strings.TrimSpace,
+		"regexpfind": func(r string, s string) (string, error) {
+			compiled, err := regexp.Compile(r)
+			if err != nil {
+				return "", err
+			}
+
+			return compiled.FindString(s), nil
+		},
+		"regexpfindall": func(r string, s string, n int) ([]string, error) {
+			compiled, err := regexp.Compile(r)
+			if err != nil {
+				return nil, err
+			}
+
+			return compiled.FindAllString(s, n), nil
+		},
+		"regexpfindallsubmatches": func(r string, s string, n int) ([][]string, error) {
+			compiled, err := regexp.Compile(r)
+			if err != nil {
+				return nil, err
+			}
+
+			return compiled.FindAllStringSubmatch(s, n), nil
+		},
+		"regexpmatch": regexp.MatchString,
+		"regexpreplace": func(r string, s string, repl string) (string, error) {
+			compiled, err := regexp.Compile(r)
+			if err != nil {
+				return "", err
+			}
+
+			return compiled.ReplaceAllString(s, repl), nil
+		},
+		"encode": func(encoding string, s string) string {
+			switch encoding {
+			case "base64":
+				return base64.StdEncoding.EncodeToString([]byte(s))
+			case "base64url":
+				return base64.URLEncoding.EncodeToString([]byte(s))
+			case "hex":
+				return hex.EncodeToString([]byte(s))
+			case "query":
+				return url.QueryEscape(s)
+			case "path":
+				return url.PathEscape(s)
+			default:
+				return ""
+			}
+		},
+		"decode": func(encoding string, s string) string {
+			switch encoding {
+			case "base64":
+				decoded, err := base64.StdEncoding.DecodeString(s)
+				if err != nil {
+					return ""
+				}
+				return string(decoded)
+			case "base64url":
+				decoded, err := base64.URLEncoding.DecodeString(s)
+				if err != nil {
+					return ""
+				}
+				return string(decoded)
+			case "hex":
+				decoded, err := hex.DecodeString(s)
+				if err != nil {
+					return ""
+				}
+				return string(decoded)
+			case "url":
+				decoded, err := url.QueryUnescape(s)
+				if err != nil {
+					return ""
+				}
+				return decoded
+			case "path":
+				decoded, err := url.PathUnescape(s)
+				if err != nil {
+					return ""
+				}
+				return decoded
+			default:
+				return ""
+			}
+		},
+		"convert": func(fromEncoding string, toEncoding string, s string) string {
+			var decoded []byte
+			var err error
+
+			switch fromEncoding {
+			case "base64":
+				decoded, err = base64.StdEncoding.DecodeString(s)
+				if err != nil {
+					return ""
+				}
+			case "base64url":
+				decoded, err = base64.URLEncoding.DecodeString(s)
+				if err != nil {
+					return ""
+				}
+			case "hex":
+				decoded, err = hex.DecodeString(s)
+				if err != nil {
+					return ""
+				}
+			default:
+				return ""
+			}
+
+			switch toEncoding {
+			case "base64":
+				return base64.StdEncoding.EncodeToString(decoded)
+			case "base64url":
+				return base64.URLEncoding.EncodeToString(decoded)
+			case "hex":
+				return hex.EncodeToString(decoded)
+			default:
+				return ""
+			}
+		},
 	}).Parse(string(scriptBytes))
 }
 
@@ -208,7 +319,7 @@ func runScript(name string, username string, port int) int {
 			} else {
 				return -1
 			}
-		case "run", "runbase64", "runbase64url", "runwait", "runbase64wait", "runbase64urlwait":
+		case "run", "runbase64", "runbase64url", "runhex", "runwait", "runbase64wait", "runbase64urlwait", "runhexwait":
 			if len(command) > 1 {
 				if strings.HasPrefix(commandName, "runbase64url") {
 					for i := range command[1:] {
@@ -222,6 +333,15 @@ func runScript(name string, username string, port int) int {
 				} else if strings.HasPrefix(commandName, "runbase64") {
 					for i := range command[1:] {
 						decoded, err := base64.StdEncoding.DecodeString(command[i+1])
+						if err != nil {
+							return -1
+						}
+
+						command[i+1] = string(decoded)
+					}
+				} else if strings.HasPrefix(commandName, "runhex") {
+					for i := range command[1:] {
+						decoded, err := hex.DecodeString(command[i+1])
 						if err != nil {
 							return -1
 						}
