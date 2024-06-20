@@ -11,9 +11,7 @@ import (
 )
 
 func runCommand(ps *portState, port int, command []string) int {
-	commandName := command[0]
-
-	switch commandName {
+	switch command[0] {
 	case "connect":
 		select {
 		case ps.connectionControlChannel <- true:
@@ -33,7 +31,7 @@ func runCommand(ps *portState, port int, command []string) int {
 			var keycode int
 			var err error
 
-			if commandName == "key" {
+			if command[0] == "key" {
 				keycode = keycodeMap[strings.ToLower(command[1])]
 				if keycode == 0 {
 					return http.StatusNotFound
@@ -76,19 +74,19 @@ func runCommand(ps *portState, port int, command []string) int {
 
 			var text string
 
-			if commandName == "typebase64" {
+			if command[0] == "typebase64" {
 				textBytes, err := base64.StdEncoding.DecodeString(command[1])
 				if err != nil {
 					return http.StatusBadRequest
 				}
 				text = string(textBytes)
-			} else if commandName == "typebase64url" {
+			} else if command[0] == "typebase64url" {
 				textBytes, err := base64.URLEncoding.DecodeString(command[1])
 				if err != nil {
 					return http.StatusBadRequest
 				}
 				text = string(textBytes)
-			} else if commandName == "typehex" {
+			} else if command[0] == "typehex" {
 				textBytes, err := hex.DecodeString(command[1])
 				if err != nil {
 					return http.StatusBadRequest
@@ -412,7 +410,7 @@ func runCommand(ps *portState, port int, command []string) int {
 				return http.StatusBadRequest
 			}
 
-			if !sendScrollEvent(ps, commandName[6:], x, y, width, height) {
+			if !sendScrollEvent(ps, command[0][6:], x, y, width, height) {
 				return http.StatusInternalServerError
 			}
 		} else {
@@ -487,19 +485,19 @@ func runCommand(ps *portState, port int, command []string) int {
 		if len(command) == 2 || len(command) == 3 {
 			var text string
 
-			if strings.HasSuffix(commandName, "base64") {
+			if strings.HasSuffix(command[0], "base64") {
 				decoded, err := base64.StdEncoding.DecodeString(command[1])
 				if err != nil {
 					return http.StatusBadRequest
 				}
 				text = string(decoded)
-			} else if strings.HasSuffix(commandName, "base64url") {
+			} else if strings.HasSuffix(command[0], "base64url") {
 				decoded, err := base64.URLEncoding.DecodeString(command[1])
 				if err != nil {
 					return http.StatusBadRequest
 				}
 				text = string(decoded)
-			} else if strings.HasSuffix(commandName, "hex") {
+			} else if strings.HasSuffix(command[0], "hex") {
 				decoded, err := hex.DecodeString(command[1])
 				if err != nil {
 					return http.StatusBadRequest
@@ -519,7 +517,7 @@ func runCommand(ps *portState, port int, command []string) int {
 				}
 			}
 
-			if !setClipboard(ps, text, sequence, strings.HasPrefix(commandName, "setclipboardpaste")) {
+			if !setClipboard(ps, text, sequence, strings.HasPrefix(command[0], "setclipboardpaste")) {
 				return http.StatusInternalServerError
 			}
 		} else {
@@ -588,9 +586,9 @@ func runCommand(ps *portState, port int, command []string) int {
 				return http.StatusNotFound
 			}
 
-			go func() {
-				scriptMessageChannel <- command[2]
-			}()
+			go func(message string) {
+				scriptMessageChannel <- message
+			}(command[2])
 		} else {
 			return http.StatusBadRequest
 		}

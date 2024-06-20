@@ -294,9 +294,9 @@ func runScript(name string, username string, port int) int {
 			return -1
 		}
 
-		commandName := strings.ToLower(command[0])
+		command[0] = strings.ToLower(command[0])
 
-		switch commandName {
+		switch command[0] {
 		case "port":
 			if len(command) == 2 {
 				port := getPort(command[1])
@@ -321,7 +321,7 @@ func runScript(name string, username string, port int) int {
 			}
 		case "run", "runbase64", "runbase64url", "runhex", "runwait", "runbase64wait", "runbase64urlwait", "runhexwait":
 			if len(command) > 1 {
-				if strings.HasPrefix(commandName, "runbase64url") {
+				if strings.HasPrefix(command[0], "runbase64url") {
 					for i := range command[1:] {
 						decoded, err := base64.URLEncoding.DecodeString(command[i+1])
 						if err != nil {
@@ -330,7 +330,7 @@ func runScript(name string, username string, port int) int {
 
 						command[i+1] = string(decoded)
 					}
-				} else if strings.HasPrefix(commandName, "runbase64") {
+				} else if strings.HasPrefix(command[0], "runbase64") {
 					for i := range command[1:] {
 						decoded, err := base64.StdEncoding.DecodeString(command[i+1])
 						if err != nil {
@@ -339,7 +339,7 @@ func runScript(name string, username string, port int) int {
 
 						command[i+1] = string(decoded)
 					}
-				} else if strings.HasPrefix(commandName, "runhex") {
+				} else if strings.HasPrefix(command[0], "runhex") {
 					for i := range command[1:] {
 						decoded, err := hex.DecodeString(command[i+1])
 						if err != nil {
@@ -350,7 +350,7 @@ func runScript(name string, username string, port int) int {
 					}
 				}
 
-				if strings.HasSuffix(commandName, "wait") {
+				if strings.HasSuffix(command[0], "wait") {
 					cmd := exec.Command(command[1], command[2:]...)
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
@@ -397,7 +397,7 @@ func runScript(name string, username string, port int) int {
 			}
 		case "httpget", "httpgetwait":
 			if len(command) == 2 {
-				if commandName == "httpget" {
+				if command[0] == "httpget" {
 					go func(url string) {
 						response, err := http.Get(url)
 						if err == nil {
@@ -420,17 +420,17 @@ func runScript(name string, username string, port int) int {
 				var data []byte
 				var err error
 
-				if strings.HasPrefix(commandName, "netsendbase64url") {
+				if strings.HasPrefix(command[0], "netsendbase64url") {
 					data, err = base64.URLEncoding.DecodeString(command[3])
 					if err != nil {
 						return -1
 					}
-				} else if strings.HasPrefix(commandName, "netsendbase64") {
+				} else if strings.HasPrefix(command[0], "netsendbase64") {
 					data, err = base64.StdEncoding.DecodeString(command[3])
 					if err != nil {
 						return -1
 					}
-				} else if strings.HasPrefix(commandName, "netsendhex") {
+				} else if strings.HasPrefix(command[0], "netsendhex") {
 					data, err = hex.DecodeString(command[3])
 					if err != nil {
 						return -1
@@ -464,7 +464,7 @@ func runScript(name string, username string, port int) int {
 				network := command[1]
 				address := command[2]
 
-				if strings.HasSuffix(commandName, "wait") {
+				if strings.HasSuffix(command[0], "wait") {
 					conn, err := net.DialTimeout(network, address, dialTimeout)
 					if err != nil {
 						return -1
@@ -507,19 +507,19 @@ func runScript(name string, username string, port int) int {
 				var data []byte
 				var err error
 
-				if commandName == "writefile" {
+				if command[0] == "writefile" {
 					data = []byte(command[2])
-				} else if commandName == "writefilebase64" {
+				} else if command[0] == "writefilebase64" {
 					data, err = base64.StdEncoding.DecodeString(command[2])
 					if err != nil {
 						return -1
 					}
-				} else if commandName == "writefilebase64url" {
+				} else if command[0] == "writefilebase64url" {
 					data, err = base64.URLEncoding.DecodeString(command[2])
 					if err != nil {
 						return -1
 					}
-				} else if commandName == "writefilehex" {
+				} else if command[0] == "writefilehex" {
 					data, err = hex.DecodeString(command[2])
 					if err != nil {
 						return -1
@@ -593,7 +593,7 @@ func runScript(name string, username string, port int) int {
 
 				ps = portMap[port]
 
-				if !ps.control || (ps.controlSocket == nil && commandName != "connect" && commandName != "disconnect" && commandName != "scriptmessage") {
+				if !ps.control || (ps.controlSocket == nil && command[0] != "connect" && command[0] != "disconnect" && command[0] != "scriptmessage") {
 					return -1
 				}
 			}
