@@ -182,6 +182,7 @@ func connectHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -254,6 +255,7 @@ func disconnectHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -357,12 +359,13 @@ func portInfoHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 
-func allowedPortsHandler(w http.ResponseWriter, req *http.Request) {
+func portsHandler(w http.ResponseWriter, req *http.Request) {
 	origin := req.Header.Get("Origin")
 
 	w.Header().Set("Cache-Control", "no-store")
@@ -422,6 +425,71 @@ func allowedPortsHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
+		w.Header().Set("Allow", "OPTIONS, GET")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func scriptsHandler(w http.ResponseWriter, req *http.Request) {
+	origin := req.Header.Get("Origin")
+
+	w.Header().Set("Cache-Control", "no-store")
+
+	switch req.Method {
+	case http.MethodOptions:
+		if req.Header.Get("Access-Control-Request-Method") == "" {
+			w.Header().Set("Allow", "OPTIONS, GET")
+		} else if origin != "" {
+			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
+
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET")
+
+			if requestHeaders != "" {
+				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
+			}
+		}
+	case http.MethodGet:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		var username string
+		var user *User
+
+		if len(config.Users) > 0 {
+			username, user = auth(w, req)
+			if user == nil {
+				return
+			}
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+			}
+		}
+
+		scriptNames := make([]string, len(config.Scripts))
+		i := 0
+		for script := range config.Scripts {
+			scriptNames[i] = script
+			i++
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(scriptNames)
+	default:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -521,6 +589,7 @@ func sendDataHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -620,6 +689,7 @@ func backOrScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -719,6 +789,7 @@ func expandNotificationsPanelHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -818,6 +889,7 @@ func expandSettingsPanelHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -917,6 +989,7 @@ func collapsePanelsHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -1016,6 +1089,7 @@ func turnScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -1115,6 +1189,7 @@ func turnScreenOffHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -1214,6 +1289,7 @@ func rotateHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -1522,9 +1598,9 @@ func main() {
 	}
 
 	{
-		endpoint, ok := endpointMap["/allowed-ports"]
+		endpoint, ok := endpointMap["/ports"]
 		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/allowed-ports", allowedPortsHandler)
+			http.HandleFunc("/ports", portsHandler)
 		}
 	}
 
@@ -1781,6 +1857,13 @@ func main() {
 	}
 
 	if len(config.Scripts) > 0 {
+		{
+			endpoint, ok := endpointMap["/scripts"]
+			if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
+				http.HandleFunc("/scripts", scriptsHandler)
+			}
+		}
+
 		{
 			endpoint, ok := endpointMap["/script"]
 			if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {

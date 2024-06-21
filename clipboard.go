@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -106,8 +107,18 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
+		var timeout time.Duration
 		var err error
+
+		if query.Has("timeout") {
+			timeout, err = time.ParseDuration(query.Get("timeout"))
+			if err != nil || timeout < 1 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
+		var after time.Duration
 
 		if query.Has("after") {
 			after, err = time.ParseDuration(query.Get("after"))
@@ -137,12 +148,33 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		w.WriteHeader(runCommand(ps, port, []string{"getclipboard", query.Get("cut")}))
+		status := runCommand(ps, port, []string{"getclipboard", query.Get("cut")})
+
+		if status != http.StatusNoContent {
+			w.WriteHeader(status)
+			return
+		}
+
+		if timeout > 0 {
+			select {
+			case s := <-ps.clipboardChannel:
+				if strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"") {
+					w.Write([]byte(s))
+				} else {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			case <-time.After(timeout):
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		} else {
+			w.WriteHeader(status)
+		}
 	default:
 		if origin != "" {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -216,6 +248,20 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
+		sequence := query.Get("sequence")
+		var timeout time.Duration
+
+		if sequence != "" && query.Has("timeout") {
+			timeout, err = time.ParseDuration(query.Get("timeout"))
+			if err != nil || timeout < 1 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		} else if sequence != "" || query.Has("timeout") {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		var after time.Duration
 
 		if query.Has("after") {
@@ -247,17 +293,39 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 		}
 
 		text := query.Get("text")
+		var status int
 
 		if paste {
-			w.WriteHeader(runCommand(ps, port, []string{"setclipboardpaste", text, query.Get("sequence")}))
+			status = runCommand(ps, port, []string{"setclipboardpaste", text, sequence})
 		} else {
-			w.WriteHeader(runCommand(ps, port, []string{"setclipboard", text, query.Get("sequence")}))
+			status = runCommand(ps, port, []string{"setclipboard", text, sequence})
+		}
+
+		if status != http.StatusNoContent {
+			w.WriteHeader(status)
+			return
+		}
+
+		if timeout > 0 {
+			select {
+			case s := <-ps.clipboardChannel:
+				if s == sequence {
+					fmt.Fprintf(w, "sequence=%s", s)
+				} else {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			case <-time.After(timeout):
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		} else {
+			w.WriteHeader(status)
 		}
 	default:
 		if origin != "" {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -349,6 +417,7 @@ func clipboardStreamHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}

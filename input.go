@@ -408,6 +408,7 @@ func keyHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -507,6 +508,7 @@ func typeHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -615,6 +617,7 @@ func touchHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -724,6 +727,7 @@ func mouseHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -823,6 +827,7 @@ func scrollHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}

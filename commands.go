@@ -465,14 +465,15 @@ func runCommand(ps *portState, port int, command []string) int {
 			return http.StatusBadRequest
 		}
 	case "getclipboard":
-		if len(command) == 1 {
-			if !getClipboard(ps, false) {
-				return http.StatusInternalServerError
-			}
-		} else if len(command) == 2 {
-			cut, err := strconv.ParseBool(command[1])
-			if err != nil {
-				return http.StatusBadRequest
+		if len(command) == 1 || len(command) == 2 {
+			var cut bool
+			var err error
+
+			if len(command) == 2 && command[1] != "" {
+				cut, err = strconv.ParseBool(command[1])
+				if err != nil {
+					return http.StatusBadRequest
+				}
 			}
 
 			if !getClipboard(ps, cut) {

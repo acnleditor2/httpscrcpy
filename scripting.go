@@ -678,6 +678,7 @@ func scriptHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -746,6 +747,7 @@ func scriptMessageHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}

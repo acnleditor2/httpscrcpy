@@ -187,13 +187,13 @@ func audioStreamHandler(w http.ResponseWriter, req *http.Request) {
 		} else {
 			w.WriteHeader(http.StatusNoContent)
 
-			go func() {
-				select {
-				case <-ps.audioConnectedChannel:
-				case <-req.Context().Done():
-					return
-				}
+			select {
+			case <-ps.audioConnectedChannel:
+			case <-req.Context().Done():
+				return
+			}
 
+			go func() {
 				if stripHeader {
 					headerBytes := make([]byte, 12)
 					var packetSize int
@@ -246,6 +246,7 @@ func audioStreamHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
+
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
