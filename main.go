@@ -501,13 +501,18 @@ func sendDataHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control || ps.controlSocket == nil {
+		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
 		if after > 0 {
 			time.Sleep(after)
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"senddata", query.Get("data")}))
@@ -595,13 +600,18 @@ func backOrScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control || ps.controlSocket == nil {
+		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
 		if after > 0 {
 			time.Sleep(after)
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"backorscreenon"}))
@@ -689,13 +699,18 @@ func expandNotificationsPanelHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control || ps.controlSocket == nil {
+		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
 		if after > 0 {
 			time.Sleep(after)
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"expandnotificationspanel"}))
@@ -783,13 +798,18 @@ func expandSettingsPanelHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control || ps.controlSocket == nil {
+		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
 		if after > 0 {
 			time.Sleep(after)
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"expandsettingspanel"}))
@@ -877,13 +897,18 @@ func collapsePanelsHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control || ps.controlSocket == nil {
+		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
 		if after > 0 {
 			time.Sleep(after)
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"collapsepanels"}))
@@ -971,13 +996,18 @@ func turnScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control || ps.controlSocket == nil {
+		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
 		if after > 0 {
 			time.Sleep(after)
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"turnscreenon"}))
@@ -1065,13 +1095,18 @@ func turnScreenOffHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control || ps.controlSocket == nil {
+		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
 		if after > 0 {
 			time.Sleep(after)
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"turnscreenoff"}))
@@ -1159,13 +1194,18 @@ func rotateHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control || ps.controlSocket == nil {
+		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
 		if after > 0 {
 			time.Sleep(after)
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"rotate"}))

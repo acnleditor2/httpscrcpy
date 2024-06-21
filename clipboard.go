@@ -123,13 +123,18 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control || ps.controlSocket == nil {
+		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
 		if after > 0 {
 			time.Sleep(after)
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 
 		w.WriteHeader(runCommand(ps, port, []string{"getclipboard", query.Get("cut")}))
@@ -227,16 +232,21 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control || ps.controlSocket == nil {
+		if !ps.control {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if after > 0 {
+			time.Sleep(after)
+		}
+
+		if ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
 		text := query.Get("text")
-
-		if after > 0 {
-			time.Sleep(after)
-		}
 
 		if paste {
 			w.WriteHeader(runCommand(ps, port, []string{"setclipboardpaste", text, query.Get("sequence")}))
