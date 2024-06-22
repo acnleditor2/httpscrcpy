@@ -311,6 +311,8 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			select {
 			case s := <-ps.clipboardChannel:
 				if s == sequence {
+					w.Header().Set("Content-Type", "application/json")
+
 					json.NewEncoder(w).Encode(struct {
 						Sequence string `json:"sequence"`
 					}{
