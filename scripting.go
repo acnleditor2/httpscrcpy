@@ -42,18 +42,18 @@ func getScriptTemplate(scriptName string) (*template.Template, error) {
 	var err error
 
 	if strings.HasPrefix(script, "http://") || strings.HasPrefix(script, "https://") {
-		scriptResponse, err := http.Get(script)
+		response, err := http.Get(script)
 		if err != nil {
 			return nil, err
 		}
 
-		defer scriptResponse.Body.Close()
+		defer response.Body.Close()
 
-		if scriptResponse.StatusCode != http.StatusOK {
+		if response.StatusCode != http.StatusOK {
 			return nil, nil
 		}
 
-		scriptBytes, err = io.ReadAll(scriptResponse.Body)
+		scriptBytes, err = io.ReadAll(response.Body)
 		if err != nil {
 			return nil, err
 		}
