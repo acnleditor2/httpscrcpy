@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -310,7 +311,11 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			select {
 			case s := <-ps.clipboardChannel:
 				if s == sequence {
-					fmt.Fprintf(w, "sequence=%s", s)
+					json.NewEncoder(w).Encode(struct {
+						Sequence string `json:"sequence"`
+					}{
+						Sequence: s,
+					})
 				} else {
 					w.WriteHeader(http.StatusInternalServerError)
 				}
