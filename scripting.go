@@ -469,6 +469,7 @@ func runScript(name string, username string, port int) int {
 					if err != nil {
 						return -1
 					}
+
 					defer conn.Close()
 
 					err = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
