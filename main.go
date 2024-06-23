@@ -1361,7 +1361,6 @@ func main() {
 				if err != nil {
 					panic(err)
 				}
-				defer ps.listener.Close()
 			}
 
 			for connect := range ps.connectionControlChannel {
