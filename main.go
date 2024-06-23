@@ -1296,10 +1296,14 @@ func rotateHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+	if len(os.Args) != 1 && len(os.Args) != 2 {
+		os.Exit(1)
+	}
+
 	var configBytes []byte
 	var err error
 
-	if len(os.Args) < 2 || os.Args[1] == "-" {
+	if len(os.Args) == 1 || os.Args[1] == "-" {
 		configBytes, err = io.ReadAll(os.Stdin)
 	} else if strings.HasPrefix(os.Args[1], "http://") || strings.HasPrefix(os.Args[1], "https://") {
 		response, err := http.Get(os.Args[1])
