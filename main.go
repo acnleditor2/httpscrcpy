@@ -11,7 +11,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 )
 
@@ -20,6 +19,9 @@ type portState struct {
 	audio                    bool
 	control                  bool
 	forward                  bool
+	videoExtension           string
+	audioExtension           string
+	clipboardStreamExtension string
 	listener                 net.Listener
 	videoSocket              net.Conn
 	audioSocket              net.Conn
@@ -38,22 +40,24 @@ type portState struct {
 }
 
 type Port struct {
-	Video   bool `json:"video"`
-	Audio   bool `json:"audio"`
-	Control bool `json:"control"`
-	Forward bool `json:"forward"`
+	Video                    bool   `json:"video"`
+	Audio                    bool   `json:"audio"`
+	Control                  bool   `json:"control"`
+	Forward                  bool   `json:"forward"`
+	VideoExtension           string `json:"videoExtension"`
+	AudioExtension           string `json:"audioExtension"`
+	ClipboardStreamExtension string `json:"clipboardStreamExtension"`
 }
 
 type Config struct {
-	Address       string              `json:"address"`
-	Static        string              `json:"static"`
-	Cert          string              `json:"cert"`
-	Key           string              `json:"key"`
-	Ports         map[string]Port     `json:"ports"`
-	Scripts       map[string]string   `json:"scripts"`
-	CachedScripts []string            `json:"cachedScripts"`
-	Users         map[string]User     `json:"users"`
-	Endpoints     map[string][]string `json:"endpoints"`
+	Address    string              `json:"address"`
+	Static     string              `json:"static"`
+	Cert       string              `json:"cert"`
+	Key        string              `json:"key"`
+	Ports      map[string]Port     `json:"ports"`
+	Users      map[string]User     `json:"users"`
+	Endpoints  map[string][]string `json:"endpoints"`
+	Extensions [][]string          `json:"extensions"`
 }
 
 var (
@@ -72,7 +76,7 @@ func getPort(portString string) int {
 
 	port, err := strconv.Atoi(portString)
 	if err != nil {
-		return -1
+		return 0
 	}
 
 	return port
@@ -163,7 +167,7 @@ func connectHandler(w http.ResponseWriter, req *http.Request) {
 		}
 
 		port := getPort(req.URL.Query().Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -236,7 +240,7 @@ func disconnectHandler(w http.ResponseWriter, req *http.Request) {
 		}
 
 		port := getPort(req.URL.Query().Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -309,7 +313,7 @@ func portInfoHandler(w http.ResponseWriter, req *http.Request) {
 		}
 
 		port := getPort(req.URL.Query().Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -434,70 +438,6 @@ func portsHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func scriptsHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		scriptNames := make([]string, len(config.Scripts))
-		i := 0
-		for script := range config.Scripts {
-			scriptNames[i] = script
-			i++
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(scriptNames)
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
 func sendDataHandler(w http.ResponseWriter, req *http.Request) {
 	origin := req.Header.Get("Origin")
 
@@ -545,7 +485,7 @@ func sendDataHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -645,7 +585,7 @@ func backOrScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -745,7 +685,7 @@ func expandNotificationsPanelHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -845,7 +785,7 @@ func expandSettingsPanelHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -945,7 +885,7 @@ func collapsePanelsHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -1045,7 +985,7 @@ func turnScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -1145,7 +1085,7 @@ func turnScreenOffHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -1245,7 +1185,7 @@ func rotateHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -1349,6 +1289,9 @@ func main() {
 			audio:                    portInfo.Audio,
 			control:                  portInfo.Control,
 			forward:                  portInfo.Forward,
+			videoExtension:           portInfo.VideoExtension,
+			audioExtension:           portInfo.AudioExtension,
+			clipboardStreamExtension: portInfo.ClipboardStreamExtension,
 			connectionControlChannel: make(chan bool),
 			videoConnectedChannel:    make(chan struct{}),
 			audioConnectedChannel:    make(chan struct{}),
@@ -1530,20 +1473,6 @@ func main() {
 				}
 			}
 		}(port)
-	}
-
-	for script := range config.Scripts {
-		scriptMessageChannelMap[script] = make(chan string)
-	}
-
-	for _, script := range config.CachedScripts {
-		_, ok := config.Scripts[script]
-		if ok {
-			t := template.Must(getScriptTemplate(script))
-			if t != nil {
-				cachedScriptTemplateMap[script] = t
-			}
-		}
 	}
 
 	for k, v := range config.Endpoints {
@@ -1862,29 +1791,6 @@ func main() {
 		}
 	}
 
-	if len(config.Scripts) > 0 {
-		{
-			endpoint, ok := endpointMap["/scripts"]
-			if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-				http.HandleFunc("/scripts", scriptsHandler)
-			}
-		}
-
-		{
-			endpoint, ok := endpointMap["/script"]
-			if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-				http.HandleFunc("/script", scriptHandler)
-			}
-		}
-
-		{
-			endpoint, ok := endpointMap["/script-message"]
-			if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-				http.HandleFunc("/script-message", scriptMessageHandler)
-			}
-		}
-	}
-
 	{
 		endpoint, ok := endpointMap["/back-or-screen-on"]
 		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
@@ -1933,6 +1839,8 @@ func main() {
 			http.HandleFunc("/rotate", rotateHandler)
 		}
 	}
+
+	loadExtensions()
 
 	if config.Static != "" {
 		http.Handle("/", http.FileServer(http.Dir(config.Static)))

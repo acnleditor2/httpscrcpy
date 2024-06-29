@@ -238,7 +238,7 @@ func sendScrollEvent(ps *portState, direction string, x int, y int, width int, h
 }
 
 func getButton(buttonString string) int {
-	switch buttonString {
+	switch strings.ToLower(buttonString) {
 	case "2", "right":
 		return 2
 	case "4", "middle":
@@ -294,7 +294,7 @@ func keyHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -461,7 +461,7 @@ func typeHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -561,7 +561,7 @@ func touchHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -670,7 +670,7 @@ func mouseHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -780,7 +780,7 @@ func scrollHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}

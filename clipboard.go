@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -98,7 +99,7 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -137,6 +138,11 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if timeout > 0 && ps.clipboardStreamExtension != "" {
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
@@ -228,7 +234,7 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -258,7 +264,7 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-		} else if sequence != "" || query.Has("timeout") {
+		} else if query.Has("timeout") && sequence == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -281,6 +287,11 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if timeout > 0 && ps.clipboardStreamExtension != "" {
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
@@ -383,7 +394,7 @@ func clipboardStreamHandler(w http.ResponseWriter, req *http.Request) {
 		}
 
 		port := getPort(req.URL.Query().Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -399,7 +410,7 @@ func clipboardStreamHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if ps.controlSocket == nil {
+		if !ps.control || ps.controlSocket == nil || ps.clipboardStreamExtension != "" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -427,5 +438,48 @@ func clipboardStreamHandler(w http.ResponseWriter, req *http.Request) {
 
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func sendClipboardToExtension(port int) {
+	ps := portMap[port]
+	extension := extensionMap[ps.clipboardStreamExtension]
+
+	for {
+		s := <-ps.clipboardChannel
+
+		var b bytes.Buffer
+
+		if strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"") {
+			var text string
+			err := json.Unmarshal([]byte(s), &text)
+			if err != nil {
+				ps.connectionControlChannel <- false
+				break
+			}
+
+			b.WriteByte(5)
+			binary.Write(&b, binary.NativeEndian, uint16(port))
+			binary.Write(&b, binary.NativeEndian, uint32(len(text)))
+			b.WriteString(text)
+		} else {
+			sequence, err := strconv.ParseUint(s, 10, 64)
+			if err != nil {
+				ps.connectionControlChannel <- false
+				break
+			}
+
+			b.WriteByte(6)
+			binary.Write(&b, binary.NativeEndian, uint16(port))
+			binary.Write(&b, binary.NativeEndian, sequence)
+		}
+
+		extension.mutex.Lock()
+		_, err := b.WriteTo(extension.stdin)
+		extension.mutex.Unlock()
+		if err != nil {
+			ps.connectionControlChannel <- false
+			break
+		}
 	}
 }

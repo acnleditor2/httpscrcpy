@@ -3,9 +3,8 @@ package main
 import "net/http"
 
 type User struct {
-	Password       string   `json:"password"`
-	AllowedPorts   []int    `json:"allowedPorts"`
-	AllowedScripts []string `json:"allowedScripts"`
+	Password     string `json:"password"`
+	AllowedPorts []int  `json:"allowedPorts"`
 }
 
 func portAllowedForUser(port int, username string) bool {

@@ -55,7 +55,7 @@ func audioStreamHandler(w http.ResponseWriter, req *http.Request) {
 		query := req.URL.Query()
 
 		port := getPort(query.Get("port"))
-		if port == -1 {
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -82,7 +82,7 @@ func audioStreamHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.audio {
+		if !ps.audio || ps.audioExtension != "" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -138,9 +138,11 @@ func audioStreamHandler(w http.ResponseWriter, req *http.Request) {
 
 					n, err = w.Write(packet)
 					if err != nil {
+						ps.connectionControlChannel <- false
 						break
 					}
 					if n < packetSize {
+						ps.connectionControlChannel <- false
 						break
 					}
 
@@ -175,9 +177,11 @@ func audioStreamHandler(w http.ResponseWriter, req *http.Request) {
 
 					n, err = w.Write(data)
 					if err != nil {
+						ps.connectionControlChannel <- false
 						break
 					}
 					if n < 12+packetSize {
+						ps.connectionControlChannel <- false
 						break
 					}
 
@@ -227,10 +231,12 @@ func audioStreamHandler(w http.ResponseWriter, req *http.Request) {
 
 						n, err = sendSocket.Write(packet)
 						if err != nil {
+							ps.connectionControlChannel <- false
 							sendSocket.Close()
 							break
 						}
-						if n != packetSize {
+						if n < packetSize {
+							ps.connectionControlChannel <- false
 							sendSocket.Close()
 							break
 						}
@@ -249,5 +255,75 @@ func audioStreamHandler(w http.ResponseWriter, req *http.Request) {
 
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func sendAudioToExtension(port int) {
+	ps := portMap[port]
+	extension := extensionMap[ps.audioExtension]
+	headerBytes := make([]byte, 12)
+	var err error
+	var packetSize int
+	var packet []byte
+	var n int
+	var data []byte
+
+	for {
+		<-ps.audioConnectedChannel
+
+		data = make([]byte, 7)
+		data[0] = 3
+		binary.NativeEndian.PutUint16(data[1:3], uint16(port))
+		binary.NativeEndian.PutUint32(data[3:], ps.audioCodec)
+		extension.mutex.Lock()
+		n, err = extension.stdin.Write(data)
+		extension.mutex.Unlock()
+		if err != nil {
+			ps.connectionControlChannel <- false
+			break
+		}
+		if n < 7 {
+			ps.connectionControlChannel <- false
+			break
+		}
+
+		for {
+			n, err = io.ReadFull(ps.audioSocket, headerBytes)
+			if err != nil {
+				break
+			}
+			if n != 12 {
+				break
+			}
+
+			packetSize = int(binary.BigEndian.Uint32(headerBytes[8:]))
+			packet = make([]byte, packetSize)
+
+			n, err = io.ReadFull(ps.audioSocket, packet)
+			if err != nil {
+				break
+			}
+			if n != packetSize {
+				break
+			}
+
+			data = make([]byte, 15+packetSize)
+			data[0] = 4
+			binary.NativeEndian.PutUint16(data[1:3], uint16(port))
+			copy(data[3:15], headerBytes)
+			copy(data[15:15+packetSize], packet)
+
+			extension.mutex.Lock()
+			n, err = extension.stdin.Write(data)
+			extension.mutex.Unlock()
+			if err != nil {
+				ps.connectionControlChannel <- false
+				break
+			}
+			if n < 15+packetSize {
+				ps.connectionControlChannel <- false
+				break
+			}
+		}
 	}
 }

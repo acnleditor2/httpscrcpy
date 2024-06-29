@@ -242,11 +242,6 @@ func runCommand(ps *portState, port int, command []string) int {
 		}
 	case "mouseclick":
 		if len(command) == 6 || len(command) == 7 {
-			button := getButton(strings.ToLower(command[1]))
-			if button == -1 {
-				return http.StatusBadRequest
-			}
-
 			x, err := strconv.Atoi(command[2])
 			if err != nil {
 				return http.StatusBadRequest
@@ -275,6 +270,8 @@ func runCommand(ps *portState, port int, command []string) int {
 				}
 			}
 
+			button := getButton(command[1])
+
 			if !sendMouseEvent(ps, 0, x, y, width, height, button) {
 				return http.StatusInternalServerError
 			}
@@ -291,32 +288,27 @@ func runCommand(ps *portState, port int, command []string) int {
 		}
 	case "mousedown":
 		if len(command) == 6 {
-			button := getButton(strings.ToLower(command[1]))
-			if button == -1 {
-				return http.StatusBadRequest
-			}
-
-			x, err := strconv.Atoi(command[1])
+			x, err := strconv.Atoi(command[2])
 			if err != nil {
 				return http.StatusBadRequest
 			}
 
-			y, err := strconv.Atoi(command[2])
+			y, err := strconv.Atoi(command[3])
 			if err != nil {
 				return http.StatusBadRequest
 			}
 
-			width, err := strconv.Atoi(command[3])
+			width, err := strconv.Atoi(command[4])
 			if err != nil {
 				return http.StatusBadRequest
 			}
 
-			height, err := strconv.Atoi(command[4])
+			height, err := strconv.Atoi(command[5])
 			if err != nil {
 				return http.StatusBadRequest
 			}
 
-			if !sendMouseEvent(ps, 0, x, y, width, height, button) {
+			if !sendMouseEvent(ps, 0, x, y, width, height, getButton(command[1])) {
 				return http.StatusInternalServerError
 			}
 		} else {
@@ -324,32 +316,27 @@ func runCommand(ps *portState, port int, command []string) int {
 		}
 	case "mouseup":
 		if len(command) == 6 {
-			button := getButton(strings.ToLower(command[1]))
-			if button == -1 {
-				return http.StatusBadRequest
-			}
-
-			x, err := strconv.Atoi(command[1])
+			x, err := strconv.Atoi(command[2])
 			if err != nil {
 				return http.StatusBadRequest
 			}
 
-			y, err := strconv.Atoi(command[2])
+			y, err := strconv.Atoi(command[3])
 			if err != nil {
 				return http.StatusBadRequest
 			}
 
-			width, err := strconv.Atoi(command[3])
+			width, err := strconv.Atoi(command[4])
 			if err != nil {
 				return http.StatusBadRequest
 			}
 
-			height, err := strconv.Atoi(command[4])
+			height, err := strconv.Atoi(command[5])
 			if err != nil {
 				return http.StatusBadRequest
 			}
 
-			if !sendMouseEvent(ps, 1, x, y, width, height, button) {
+			if !sendMouseEvent(ps, 1, x, y, width, height, getButton(command[1])) {
 				return http.StatusInternalServerError
 			}
 		} else {
@@ -357,32 +344,27 @@ func runCommand(ps *portState, port int, command []string) int {
 		}
 	case "mousemove":
 		if len(command) == 6 {
-			button := getButton(strings.ToLower(command[1]))
-			if button == -1 {
-				return http.StatusBadRequest
-			}
-
-			x, err := strconv.Atoi(command[1])
+			x, err := strconv.Atoi(command[2])
 			if err != nil {
 				return http.StatusBadRequest
 			}
 
-			y, err := strconv.Atoi(command[2])
+			y, err := strconv.Atoi(command[3])
 			if err != nil {
 				return http.StatusBadRequest
 			}
 
-			width, err := strconv.Atoi(command[3])
+			width, err := strconv.Atoi(command[4])
 			if err != nil {
 				return http.StatusBadRequest
 			}
 
-			height, err := strconv.Atoi(command[4])
+			height, err := strconv.Atoi(command[5])
 			if err != nil {
 				return http.StatusBadRequest
 			}
 
-			if !sendMouseEvent(ps, 2, x, y, width, height, button) {
+			if !sendMouseEvent(ps, 2, x, y, width, height, getButton(command[1])) {
 				return http.StatusInternalServerError
 			}
 		} else {
@@ -580,16 +562,14 @@ func runCommand(ps *portState, port int, command []string) int {
 		} else {
 			return http.StatusBadRequest
 		}
-	case "scriptmessage":
-		if len(command) == 3 {
-			scriptMessageChannel, ok := scriptMessageChannelMap[command[1]]
-			if !ok {
-				return http.StatusNotFound
+	case "sleep":
+		if len(command) == 2 {
+			duration, err := time.ParseDuration(command[1])
+			if err != nil {
+				return http.StatusBadRequest
 			}
 
-			go func(message string) {
-				scriptMessageChannel <- message
-			}(command[2])
+			time.Sleep(duration)
 		} else {
 			return http.StatusBadRequest
 		}
