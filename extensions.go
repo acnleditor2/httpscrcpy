@@ -12,10 +12,11 @@ import (
 )
 
 type extensionState struct {
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	stdout io.ReadCloser
-	mutex  sync.Mutex
+	cmd            *exec.Cmd
+	stdin          io.WriteCloser
+	stdout         io.ReadCloser
+	singleEndpoint bool
+	mutex          sync.Mutex
 }
 
 var (
@@ -74,8 +75,11 @@ func extensionRequestHandler(w http.ResponseWriter, req *http.Request) {
 
 	b.WriteByte(0)
 	binary.Write(&b, binary.NativeEndian, uint16(port))
-	b.WriteByte(byte(len(req.URL.Path)))
-	b.WriteString(req.URL.Path)
+
+	if !extension.singleEndpoint {
+		b.WriteByte(byte(len(req.URL.Path)))
+		b.WriteString(req.URL.Path)
+	}
 
 	binary.Write(&b, binary.NativeEndian, uint32(len(query)))
 	for name, values := range query {
@@ -380,9 +384,10 @@ func loadExtensions() {
 		}
 
 		extensionMap[extensionId] = &extensionState{
-			cmd:    cmd,
-			stdin:  stdin,
-			stdout: stdout,
+			cmd:            cmd,
+			stdin:          stdin,
+			stdout:         stdout,
+			singleEndpoint: endpointCount == 1,
 		}
 	}
 
