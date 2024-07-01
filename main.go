@@ -11,7 +11,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type portState struct {
@@ -495,17 +494,6 @@ func sendDataHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
-		var err error
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -515,10 +503,6 @@ func sendDataHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -595,17 +579,6 @@ func backOrScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
-		var err error
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -615,10 +588,6 @@ func backOrScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -695,17 +664,6 @@ func expandNotificationsPanelHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
-		var err error
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -715,10 +673,6 @@ func expandNotificationsPanelHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -795,17 +749,6 @@ func expandSettingsPanelHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
-		var err error
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -815,10 +758,6 @@ func expandSettingsPanelHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -895,17 +834,6 @@ func collapsePanelsHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
-		var err error
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -915,10 +843,6 @@ func collapsePanelsHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -995,17 +919,6 @@ func turnScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
-		var err error
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -1015,10 +928,6 @@ func turnScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -1095,17 +1004,6 @@ func turnScreenOffHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
-		var err error
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -1115,10 +1013,6 @@ func turnScreenOffHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -1195,17 +1089,6 @@ func rotateHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
-		var err error
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -1215,10 +1098,6 @@ func rotateHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -1687,9 +1566,23 @@ func main() {
 	}
 
 	{
+		endpoint, ok := endpointMap["/get-clipboard-sync"]
+		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
+			http.HandleFunc("/get-clipboard-sync", getClipboardSyncHandler)
+		}
+	}
+
+	{
 		endpoint, ok := endpointMap["/set-clipboard"]
 		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
 			http.HandleFunc("/set-clipboard", setClipboardHandler)
+		}
+	}
+
+	{
+		endpoint, ok := endpointMap["/set-clipboard-sync"]
+		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
+			http.HandleFunc("/set-clipboard-sync", setClipboardSyncHandler)
 		}
 	}
 

@@ -354,16 +354,6 @@ func keyHandler(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
-		var after time.Duration
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -373,10 +363,6 @@ func keyHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -471,17 +457,6 @@ func typeHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
-		var err error
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -491,10 +466,6 @@ func typeHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -571,17 +542,6 @@ func touchHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
-		var err error
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -591,10 +551,6 @@ func touchHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -680,17 +636,6 @@ func mouseHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
-		var err error
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -700,10 +645,6 @@ func mouseHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -790,17 +731,6 @@ func scrollHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var after time.Duration
-		var err error
-
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -810,10 +740,6 @@ func scrollHandler(w http.ResponseWriter, req *http.Request) {
 		if !ps.control {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {

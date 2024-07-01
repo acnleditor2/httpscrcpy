@@ -271,7 +271,6 @@ func sendVideoToExtension(port int) {
 	ps := portMap[port]
 	extension := extensionMap[ps.videoExtension]
 	headerBytes := make([]byte, 12)
-	var extensionInitialized bool
 	var err error
 	var packetSize int
 	var packet []byte
@@ -281,24 +280,20 @@ func sendVideoToExtension(port int) {
 	for {
 		<-ps.videoConnectedChannel
 
-		if !extensionInitialized {
-			data = make([]byte, 7)
-			data[0] = 1
-			binary.NativeEndian.PutUint16(data[1:3], uint16(port))
-			binary.NativeEndian.PutUint32(data[3:], ps.videoCodec)
-			extension.mutex.Lock()
-			n, err = extension.stdin.Write(data)
-			extension.mutex.Unlock()
-			if err != nil {
-				ps.connectionControlChannel <- false
-				break
-			}
-			if n < 7 {
-				ps.connectionControlChannel <- false
-				break
-			}
-
-			// extensionInitialized = true
+		data = make([]byte, 7)
+		data[0] = 1
+		binary.NativeEndian.PutUint16(data[1:3], uint16(port))
+		binary.NativeEndian.PutUint32(data[3:], ps.videoCodec)
+		extension.mutex.Lock()
+		n, err = extension.stdin.Write(data)
+		extension.mutex.Unlock()
+		if err != nil {
+			ps.connectionControlChannel <- false
+			break
+		}
+		if n < 7 {
+			ps.connectionControlChannel <- false
+			break
 		}
 
 		for {

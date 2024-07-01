@@ -109,25 +109,95 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		var timeout time.Duration
-		var err error
+		ps, ok := portMap[port]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 
-		if query.Has("timeout") {
-			timeout, err = time.ParseDuration(query.Get("timeout"))
-			if err != nil || timeout < 1 {
-				w.WriteHeader(http.StatusBadRequest)
+		if !ps.control {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		w.WriteHeader(runCommand(ps, port, []string{"getclipboard", query.Get("cut")}))
+	default:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		w.Header().Set("Allow", "OPTIONS, GET")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func getClipboardSyncHandler(w http.ResponseWriter, req *http.Request) {
+	origin := req.Header.Get("Origin")
+
+	w.Header().Set("Cache-Control", "no-store")
+
+	switch req.Method {
+	case http.MethodOptions:
+		if req.Header.Get("Access-Control-Request-Method") == "" {
+			w.Header().Set("Allow", "OPTIONS, GET")
+		} else if origin != "" {
+			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
+
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET")
+
+			if requestHeaders != "" {
+				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
+			}
+		}
+	case http.MethodGet:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		var username string
+		var user *User
+
+		if len(config.Users) > 0 {
+			username, user = auth(w, req)
+			if user == nil {
 				return
+			}
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 			}
 		}
 
-		var after time.Duration
+		query := req.URL.Query()
 
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
+		port := getPort(query.Get("port"))
+		if port == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		timeout, err := time.ParseDuration(query.Get("timeout"))
+		if err != nil || timeout < 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 
 		ps, ok := portMap[port]
@@ -141,13 +211,9 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if timeout > 0 && ps.clipboardStreamExtension != "" {
-			w.WriteHeader(http.StatusBadRequest)
+		if ps.clipboardStreamExtension != "" {
+			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -162,19 +228,15 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if timeout > 0 {
-			select {
-			case s := <-ps.clipboardChannel:
-				if strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"") {
-					w.Write([]byte(s))
-				} else {
-					w.WriteHeader(http.StatusInternalServerError)
-				}
-			case <-time.After(timeout):
+		select {
+		case s := <-ps.clipboardChannel:
+			if strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"") {
+				w.Write([]byte(s))
+			} else {
 				w.WriteHeader(http.StatusInternalServerError)
 			}
-		} else {
-			w.WriteHeader(status)
+		case <-time.After(timeout):
+			w.WriteHeader(http.StatusInternalServerError)
 		}
 	default:
 		if origin != "" {
@@ -255,28 +317,119 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
-		sequence := query.Get("sequence")
-		var timeout time.Duration
+		ps, ok := portMap[port]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 
-		if sequence != "" && query.Has("timeout") {
-			timeout, err = time.ParseDuration(query.Get("timeout"))
-			if err != nil || timeout < 1 {
-				w.WriteHeader(http.StatusBadRequest)
+		if !ps.control {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		text := query.Get("text")
+		sequence := query.Get("sequence")
+
+		if paste {
+			w.WriteHeader(runCommand(ps, port, []string{"setclipboardpaste", text, sequence}))
+		} else {
+			w.WriteHeader(runCommand(ps, port, []string{"setclipboard", text, sequence}))
+		}
+	default:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		w.Header().Set("Allow", "OPTIONS, GET")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func setClipboardSyncHandler(w http.ResponseWriter, req *http.Request) {
+	origin := req.Header.Get("Origin")
+
+	w.Header().Set("Cache-Control", "no-store")
+
+	switch req.Method {
+	case http.MethodOptions:
+		if req.Header.Get("Access-Control-Request-Method") == "" {
+			w.Header().Set("Allow", "OPTIONS, GET")
+		} else if origin != "" {
+			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
+
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET")
+
+			if requestHeaders != "" {
+				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
+			}
+		}
+	case http.MethodGet:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		var username string
+		var user *User
+
+		if len(config.Users) > 0 {
+			username, user = auth(w, req)
+			if user == nil {
 				return
 			}
-		} else if query.Has("timeout") && sequence == "" {
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+			}
+		}
+
+		query := req.URL.Query()
+
+		port := getPort(query.Get("port"))
+		if port == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		var after time.Duration
+		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
 
-		if query.Has("after") {
-			after, err = time.ParseDuration(query.Get("after"))
+		paste := false
+		var err error
+
+		if query.Has("paste") {
+			paste, err = strconv.ParseBool(query.Get("paste"))
 			if err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
+		}
+
+		sequence := query.Get("sequence")
+		if sequence == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		timeout, err := time.ParseDuration(query.Get("timeout"))
+		if err != nil || timeout < 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 
 		ps, ok := portMap[port]
@@ -290,13 +443,9 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if timeout > 0 && ps.clipboardStreamExtension != "" {
+		if ps.clipboardStreamExtension != "" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
-		}
-
-		if after > 0 {
-			time.Sleep(after)
 		}
 
 		if ps.controlSocket == nil {
@@ -318,25 +467,21 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if timeout > 0 {
-			select {
-			case s := <-ps.clipboardChannel:
-				if s == sequence {
-					w.Header().Set("Content-Type", "application/json")
+		select {
+		case s := <-ps.clipboardChannel:
+			if s == sequence {
+				w.Header().Set("Content-Type", "application/json")
 
-					json.NewEncoder(w).Encode(struct {
-						Sequence string `json:"sequence"`
-					}{
-						Sequence: s,
-					})
-				} else {
-					w.WriteHeader(http.StatusInternalServerError)
-				}
-			case <-time.After(timeout):
+				json.NewEncoder(w).Encode(struct {
+					Sequence string `json:"sequence"`
+				}{
+					Sequence: s,
+				})
+			} else {
 				w.WriteHeader(http.StatusInternalServerError)
 			}
-		} else {
-			w.WriteHeader(status)
+		case <-time.After(timeout):
+			w.WriteHeader(http.StatusInternalServerError)
 		}
 	default:
 		if origin != "" {
@@ -410,7 +555,17 @@ func clipboardStreamHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control || ps.controlSocket == nil || ps.clipboardStreamExtension != "" {
+		if !ps.control {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if ps.clipboardStreamExtension != "" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
