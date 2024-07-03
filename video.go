@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"net"
@@ -280,18 +281,18 @@ func sendVideoToExtension(port int) {
 	for {
 		<-ps.videoConnectedChannel
 
-		data = make([]byte, 7)
-		data[0] = 1
-		binary.NativeEndian.PutUint16(data[1:3], uint16(port))
-		binary.NativeEndian.PutUint32(data[3:], ps.videoCodec)
+		var b bytes.Buffer
+		b.WriteByte(1)
+		binary.Write(&b, binary.NativeEndian, uint16(port))
+		b.WriteByte(byte(len(ps.deviceName)))
+		b.WriteString(ps.deviceName)
+		binary.Write(&b, binary.NativeEndian, ps.videoCodec)
+		binary.Write(&b, binary.NativeEndian, ps.initialVideoWidth)
+		binary.Write(&b, binary.NativeEndian, ps.initialVideoHeight)
 		extension.mutex.Lock()
-		n, err = extension.stdin.Write(data)
+		_, err = b.WriteTo(extension.stdin)
 		extension.mutex.Unlock()
 		if err != nil {
-			ps.connectionControlChannel <- false
-			break
-		}
-		if n < 7 {
 			ps.connectionControlChannel <- false
 			break
 		}
