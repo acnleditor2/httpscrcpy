@@ -82,7 +82,7 @@ func audioStreamHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.audio || ps.audioExtension != "" {
+		if !config.Ports[port].Audio || config.Ports[port].AudioExtension != "" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -258,9 +258,7 @@ func audioStreamHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func sendAudioToExtension(port int) {
-	ps := portMap[port]
-	extension := extensionMap[ps.audioExtension]
+func sendAudioToExtension(port int, ps *portState, extension *extensionState) {
 	headerBytes := make([]byte, 12)
 	var err error
 	var packetSize int

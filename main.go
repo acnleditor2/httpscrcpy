@@ -9,18 +9,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 )
 
 type portState struct {
-	video                    bool
-	audio                    bool
-	control                  bool
-	forward                  bool
-	videoExtension           string
-	audioExtension           string
-	clipboardStreamExtension string
 	listener                 net.Listener
 	videoSocket              net.Conn
 	audioSocket              net.Conn
@@ -36,16 +30,23 @@ type portState struct {
 	audioCodec               uint32
 	initialVideoWidth        uint32
 	initialVideoHeight       uint32
+	scrcpyServer             *exec.Cmd
 }
 
 type Port struct {
-	Video                    bool   `json:"video"`
-	Audio                    bool   `json:"audio"`
-	Control                  bool   `json:"control"`
-	Forward                  bool   `json:"forward"`
-	VideoExtension           string `json:"videoExtension"`
-	AudioExtension           string `json:"audioExtension"`
-	ClipboardStreamExtension string `json:"clipboardStreamExtension"`
+	Video                    bool     `json:"video"`
+	Audio                    bool     `json:"audio"`
+	Control                  bool     `json:"control"`
+	Forward                  bool     `json:"forward"`
+	VideoExtension           string   `json:"videoExtension"`
+	AudioExtension           string   `json:"audioExtension"`
+	ClipboardStreamExtension string   `json:"clipboardStreamExtension"`
+	ScrcpyServer             []string `json:"scrcpyServer"`
+	ScrcpyServerOptions      []string `json:"scrcpyServerOptions"`
+	Device                   string   `json:"device"`
+	ClipboardAutosync        bool     `json:"clipboardAutosync"`
+	Cleanup                  bool     `json:"cleanup"`
+	PowerOn                  bool     `json:"powerOn"`
 }
 
 type Config struct {
@@ -53,10 +54,11 @@ type Config struct {
 	Static     string              `json:"static"`
 	Cert       string              `json:"cert"`
 	Key        string              `json:"key"`
-	Ports      map[string]Port     `json:"ports"`
+	Ports      map[int]Port        `json:"ports"`
 	Users      map[string]User     `json:"users"`
 	Endpoints  map[string][]string `json:"endpoints"`
 	Extensions [][]string          `json:"extensions"`
+	Adb        string              `json:"adb"`
 }
 
 var (
@@ -95,14 +97,15 @@ func readDummyByte(c net.Conn) bool {
 	return true
 }
 
-func readDeviceMeta(ps *portState) bool {
+func readDeviceMeta(port int) bool {
+	ps := portMap[port]
 	data := make([]byte, 64)
 	var n int
 	var err error
 
-	if ps.video {
+	if config.Ports[port].Video {
 		n, err = io.ReadFull(ps.videoSocket, data)
-	} else if ps.audio {
+	} else if config.Ports[port].Audio {
 		n, err = io.ReadFull(ps.audioSocket, data)
 	} else {
 		n, err = io.ReadFull(ps.controlSocket, data)
@@ -267,6 +270,152 @@ func disconnectHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func startScrcpyServerHandler(w http.ResponseWriter, req *http.Request) {
+	origin := req.Header.Get("Origin")
+
+	w.Header().Set("Cache-Control", "no-store")
+
+	switch req.Method {
+	case http.MethodOptions:
+		if req.Header.Get("Access-Control-Request-Method") == "" {
+			w.Header().Set("Allow", "OPTIONS, GET")
+		} else if origin != "" {
+			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
+
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET")
+
+			if requestHeaders != "" {
+				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
+			}
+		}
+	case http.MethodGet:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		var username string
+		var user *User
+
+		if len(config.Users) > 0 {
+			username, user = auth(w, req)
+			if user == nil {
+				return
+			}
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+			}
+		}
+
+		port := getPort(req.URL.Query().Get("port"))
+		if port == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		ps, ok := portMap[port]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		w.WriteHeader(runCommand(ps, port, []string{"startscrcpyserver"}))
+	default:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		w.Header().Set("Allow", "OPTIONS, GET")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func stopScrcpyServerHandler(w http.ResponseWriter, req *http.Request) {
+	origin := req.Header.Get("Origin")
+
+	w.Header().Set("Cache-Control", "no-store")
+
+	switch req.Method {
+	case http.MethodOptions:
+		if req.Header.Get("Access-Control-Request-Method") == "" {
+			w.Header().Set("Allow", "OPTIONS, GET")
+		} else if origin != "" {
+			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
+
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET")
+
+			if requestHeaders != "" {
+				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
+			}
+		}
+	case http.MethodGet:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		var username string
+		var user *User
+
+		if len(config.Users) > 0 {
+			username, user = auth(w, req)
+			if user == nil {
+				return
+			}
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+			}
+		}
+
+		port := getPort(req.URL.Query().Get("port"))
+		if port == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		ps, ok := portMap[port]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		w.WriteHeader(runCommand(ps, port, []string{"stopscrcpyserver"}))
+	default:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		w.Header().Set("Allow", "OPTIONS, GET")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
 func portInfoHandler(w http.ResponseWriter, req *http.Request) {
 	origin := req.Header.Get("Origin")
 
@@ -415,12 +564,11 @@ func portsHandler(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
-		ports := map[string]Port{}
+		ports := map[int]Port{}
 
 		for port := range portMap {
 			if len(config.Users) == 0 || portAllowedForUser(port, username) {
-				portString := strconv.Itoa(port)
-				ports[portString] = config.Ports[portString]
+				ports[port] = config.Ports[port]
 			}
 		}
 
@@ -500,7 +648,7 @@ func sendDataHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -585,7 +733,7 @@ func backOrScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -670,7 +818,7 @@ func expandNotificationsPanelHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -755,7 +903,7 @@ func expandSettingsPanelHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -840,7 +988,7 @@ func collapsePanelsHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -925,7 +1073,7 @@ func turnScreenOnHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -1010,7 +1158,7 @@ func turnScreenOffHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -1095,7 +1243,7 @@ func rotateHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -1157,20 +1305,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	for portString, portInfo := range config.Ports {
-		port, err := strconv.Atoi(portString)
-		if err != nil {
-			panic(err)
-		}
-
+	for port := range config.Ports {
 		portMap[port] = &portState{
-			video:                    portInfo.Video,
-			audio:                    portInfo.Audio,
-			control:                  portInfo.Control,
-			forward:                  portInfo.Forward,
-			videoExtension:           portInfo.VideoExtension,
-			audioExtension:           portInfo.AudioExtension,
-			clipboardStreamExtension: portInfo.ClipboardStreamExtension,
 			connectionControlChannel: make(chan bool),
 			videoConnectedChannel:    make(chan struct{}),
 			audioConnectedChannel:    make(chan struct{}),
@@ -1181,10 +1317,10 @@ func main() {
 			ps := portMap[p]
 			var err error
 
-			if !ps.forward {
+			if !config.Ports[p].Forward {
 				ps.listener, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p))
 				if err != nil {
-					panic(err)
+					return
 				}
 			}
 
@@ -1202,11 +1338,11 @@ func main() {
 				}
 
 				if connect {
-					if ps.video {
-						if ps.forward {
+					if config.Ports[p].Video {
+						if config.Ports[p].Forward {
 							ps.videoSocket, err = net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", p))
 							if err != nil {
-								panic(err)
+								return
 							}
 
 							if !readDummyByte(ps.videoSocket) {
@@ -1215,52 +1351,52 @@ func main() {
 						} else {
 							ps.videoSocket, err = ps.listener.Accept()
 							if err != nil {
-								panic(err)
+								return
 							}
 						}
 					}
 
-					if ps.audio {
-						if ps.forward {
+					if config.Ports[p].Audio {
+						if config.Ports[p].Forward {
 							ps.audioSocket, err = net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", p))
 							if err != nil {
-								panic(err)
+								return
 							}
 
-							if !ps.video && !readDummyByte(ps.audioSocket) {
+							if !config.Ports[p].Video && !readDummyByte(ps.audioSocket) {
 								continue
 							}
 						} else {
 							ps.audioSocket, err = ps.listener.Accept()
 							if err != nil {
-								panic(err)
+								return
 							}
 						}
 					}
 
-					if ps.control {
-						if ps.forward {
+					if config.Ports[p].Control {
+						if config.Ports[p].Forward {
 							ps.controlSocket, err = net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", p))
 							if err != nil {
-								panic(err)
+								return
 							}
 
-							if !ps.video && !ps.audio && !readDummyByte(ps.controlSocket) {
+							if !config.Ports[p].Video && !config.Ports[p].Audio && !readDummyByte(ps.controlSocket) {
 								continue
 							}
 						} else {
 							ps.controlSocket, err = ps.listener.Accept()
 							if err != nil {
-								panic(err)
+								return
 							}
 						}
 					}
 
-					if !readDeviceMeta(ps) {
+					if !readDeviceMeta(p) {
 						continue
 					}
 
-					if ps.video {
+					if config.Ports[p].Video {
 						data := make([]byte, 12)
 						n, err := io.ReadFull(ps.videoSocket, data)
 						if err != nil {
@@ -1275,7 +1411,7 @@ func main() {
 						ps.initialVideoHeight = binary.BigEndian.Uint32(data[8:])
 					}
 
-					if ps.audio {
+					if config.Ports[p].Audio {
 						data := make([]byte, 4)
 						n, err := io.ReadFull(ps.audioSocket, data)
 						if err != nil {
@@ -1288,7 +1424,7 @@ func main() {
 						ps.audioCodec = binary.BigEndian.Uint32(data)
 					}
 
-					if ps.control {
+					if config.Ports[p].Control {
 						go func() {
 							data := make([]byte, 262144)
 
@@ -1342,11 +1478,11 @@ func main() {
 						}()
 					}
 
-					if ps.video {
+					if config.Ports[p].Video {
 						ps.videoConnectedChannel <- struct{}{}
 					}
 
-					if ps.audio {
+					if config.Ports[p].Audio {
 						ps.audioConnectedChannel <- struct{}{}
 					}
 				}
@@ -1373,6 +1509,22 @@ func main() {
 		endpoint, ok := endpointMap["/disconnect"]
 		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
 			http.HandleFunc("/disconnect", disconnectHandler)
+		}
+	}
+
+	if config.Adb != "" {
+		{
+			endpoint, ok := endpointMap["/start-scrcpy-server"]
+			if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
+				http.HandleFunc("/start-scrcpy-server", startScrcpyServerHandler)
+			}
+		}
+
+		{
+			endpoint, ok := endpointMap["/stop-scrcpy-server"]
+			if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
+				http.HandleFunc("/stop-scrcpy-server", stopScrcpyServerHandler)
+			}
 		}
 	}
 

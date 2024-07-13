@@ -360,7 +360,7 @@ func keyHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -463,7 +463,7 @@ func typeHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -548,7 +548,7 @@ func touchHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -642,7 +642,7 @@ func mouseHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -737,7 +737,7 @@ func scrollHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}

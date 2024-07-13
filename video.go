@@ -83,7 +83,7 @@ func videoStreamHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.video || ps.videoExtension != "" {
+		if !config.Ports[port].Video || config.Ports[port].VideoExtension != "" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -268,9 +268,7 @@ func videoStreamHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func sendVideoToExtension(port int) {
-	ps := portMap[port]
-	extension := extensionMap[ps.videoExtension]
+func sendVideoToExtension(port int, ps *portState, extension *extensionState) {
 	headerBytes := make([]byte, 12)
 	var err error
 	var packetSize int

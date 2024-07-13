@@ -4,7 +4,10 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -20,12 +23,111 @@ func runCommand(ps *portState, port int, command []string) int {
 			return http.StatusServiceUnavailable
 		}
 	case "disconnect":
+		if ps.scrcpyServer != nil {
+			return http.StatusServiceUnavailable
+		}
+
 		select {
 		case ps.connectionControlChannel <- false:
 			return http.StatusNoContent
 		default:
 			return http.StatusServiceUnavailable
 		}
+	case "startscrcpyserver":
+		if config.Adb == "" {
+			return http.StatusNotFound
+		}
+
+		if len(config.Ports[port].ScrcpyServer) != 2 {
+			return http.StatusNotFound
+		}
+
+		if ps.scrcpyServer != nil {
+			select {
+			case ps.connectionControlChannel <- false:
+				time.Sleep(1 * time.Second)
+			default:
+			}
+
+			ps.scrcpyServer.Process.Kill()
+			ps.scrcpyServer.Wait()
+		}
+
+		var deviceArgs []string
+
+		if config.Ports[port].Device == "usb" {
+			deviceArgs = []string{"-d"}
+		} else if config.Ports[port].Device == "tcpip" {
+			deviceArgs = []string{"-e"}
+		} else if config.Ports[port].Device != "" {
+			deviceArgs = []string{"-s", config.Ports[port].Device}
+		}
+
+		args := append(
+			deviceArgs,
+			"shell",
+			fmt.Sprintf("CLASSPATH=%s", config.Ports[port].ScrcpyServer[0]),
+			"app_process",
+			"/",
+			"com.genymobile.scrcpy.Server",
+			config.Ports[port].ScrcpyServer[1],
+		)
+
+		if !config.Ports[port].Video {
+			args = append(args, "video=false")
+		}
+
+		if !config.Ports[port].Audio {
+			args = append(args, "audio=false")
+		}
+
+		if !config.Ports[port].Control {
+			args = append(args, "control=false")
+
+			if !config.Ports[port].ClipboardAutosync {
+				args = append(args, "clipboard_autosync=false")
+			}
+		}
+
+		if !config.Ports[port].Cleanup {
+			args = append(args, "cleanup=false")
+		}
+
+		if !config.Ports[port].PowerOn {
+			args = append(args, "power_on=false")
+		}
+
+		if config.Ports[port].Forward {
+			args = append(args, "tunnel_forward=true")
+		}
+
+		if len(config.Ports[port].ScrcpyServerOptions) > 0 {
+			args = append(args, config.Ports[port].ScrcpyServerOptions...)
+		}
+
+		ps.scrcpyServer = exec.Command(config.Adb, args...)
+		ps.scrcpyServer.Stdin = nil
+		ps.scrcpyServer.Stdout = os.Stdout
+		ps.scrcpyServer.Stderr = os.Stderr
+
+		if ps.scrcpyServer.Start() != nil {
+			ps.scrcpyServer = nil
+			return http.StatusInternalServerError
+		}
+	case "stopscrcpyserver":
+		if ps.scrcpyServer == nil {
+			return http.StatusNotFound
+		}
+
+		select {
+		case ps.connectionControlChannel <- false:
+			time.Sleep(1 * time.Second)
+		default:
+		}
+
+		ps.scrcpyServer.Process.Kill()
+		ps.scrcpyServer.Wait()
+		ps.scrcpyServer = nil
 	case "key", "key2":
 		if len(command) == 2 || len(command) == 3 {
 			var keycode int

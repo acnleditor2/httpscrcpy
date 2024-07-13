@@ -115,7 +115,7 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -206,12 +206,12 @@ func getClipboardSyncHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
-		if ps.clipboardStreamExtension != "" {
+		if config.Ports[port].ClipboardStreamExtension != "" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -323,7 +323,7 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -438,12 +438,12 @@ func setClipboardSyncHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
-		if ps.clipboardStreamExtension != "" {
+		if config.Ports[port].ClipboardStreamExtension != "" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -555,12 +555,12 @@ func clipboardStreamHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !ps.control {
+		if !config.Ports[port].Control {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
-		if ps.clipboardStreamExtension != "" {
+		if config.Ports[port].ClipboardStreamExtension != "" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -596,10 +596,7 @@ func clipboardStreamHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func sendClipboardToExtension(port int) {
-	ps := portMap[port]
-	extension := extensionMap[ps.clipboardStreamExtension]
-
+func sendClipboardToExtension(port int, ps *portState, extension *extensionState) {
 	for {
 		s := <-ps.clipboardChannel
 

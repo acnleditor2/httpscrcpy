@@ -251,7 +251,7 @@ func extensionRequestHandler(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 
-			if !ps.control {
+			if !config.Ports[port].Control {
 				return
 			}
 
@@ -391,25 +391,25 @@ func loadExtensions() {
 		}
 	}
 
-	for port, ps := range portMap {
-		if ps.video && ps.videoExtension != "" {
-			_, ok := extensionMap[ps.videoExtension]
+	for portNumber, port := range config.Ports {
+		if port.Video && port.VideoExtension != "" {
+			extension, ok := extensionMap[port.VideoExtension]
 			if ok {
-				go sendVideoToExtension(port)
+				go sendVideoToExtension(portNumber, portMap[portNumber], extension)
 			}
 		}
 
-		if ps.audio && ps.audioExtension != "" {
-			_, ok := extensionMap[ps.audioExtension]
+		if port.Audio && port.AudioExtension != "" {
+			extension, ok := extensionMap[port.AudioExtension]
 			if ok {
-				go sendAudioToExtension(port)
+				go sendAudioToExtension(portNumber, portMap[portNumber], extension)
 			}
 		}
 
-		if ps.control && ps.clipboardStreamExtension != "" {
-			_, ok := extensionMap[ps.clipboardStreamExtension]
+		if port.Control && port.ClipboardStreamExtension != "" {
+			extension, ok := extensionMap[port.ClipboardStreamExtension]
 			if ok {
-				go sendClipboardToExtension(port)
+				go sendClipboardToExtension(portNumber, portMap[portNumber], extension)
 			}
 		}
 	}
