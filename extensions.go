@@ -294,7 +294,7 @@ func loadExtensions() {
 		if err != nil {
 			panic(err)
 		}
-		if n != 1 || len(data) < 1 {
+		if n != 1 || data[0] < 1 {
 			cmd.Process.Kill()
 			cmd.Wait()
 			os.Exit(1)

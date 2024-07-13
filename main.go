@@ -41,9 +41,9 @@ type Port struct {
 	VideoExtension           string   `json:"videoExtension"`
 	AudioExtension           string   `json:"audioExtension"`
 	ClipboardStreamExtension string   `json:"clipboardStreamExtension"`
+	Adb                      []string `json:"adb"`
 	ScrcpyServer             []string `json:"scrcpyServer"`
 	ScrcpyServerOptions      []string `json:"scrcpyServerOptions"`
-	Device                   string   `json:"device"`
 	ClipboardAutosync        bool     `json:"clipboardAutosync"`
 	Cleanup                  bool     `json:"cleanup"`
 	PowerOn                  bool     `json:"powerOn"`
@@ -58,7 +58,6 @@ type Config struct {
 	Users      map[string]User     `json:"users"`
 	Endpoints  map[string][]string `json:"endpoints"`
 	Extensions [][]string          `json:"extensions"`
-	Adb        string              `json:"adb"`
 }
 
 var (
@@ -1512,19 +1511,17 @@ func main() {
 		}
 	}
 
-	if config.Adb != "" {
-		{
-			endpoint, ok := endpointMap["/start-scrcpy-server"]
-			if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-				http.HandleFunc("/start-scrcpy-server", startScrcpyServerHandler)
-			}
+	{
+		endpoint, ok := endpointMap["/start-scrcpy-server"]
+		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
+			http.HandleFunc("/start-scrcpy-server", startScrcpyServerHandler)
 		}
+	}
 
-		{
-			endpoint, ok := endpointMap["/stop-scrcpy-server"]
-			if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-				http.HandleFunc("/stop-scrcpy-server", stopScrcpyServerHandler)
-			}
+	{
+		endpoint, ok := endpointMap["/stop-scrcpy-server"]
+		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
+			http.HandleFunc("/stop-scrcpy-server", stopScrcpyServerHandler)
 		}
 	}
 

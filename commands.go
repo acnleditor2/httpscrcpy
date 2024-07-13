@@ -34,7 +34,7 @@ func runCommand(ps *portState, port int, command []string) int {
 			return http.StatusServiceUnavailable
 		}
 	case "startscrcpyserver":
-		if config.Adb == "" {
+		if len(config.Ports[port].Adb) == 0 {
 			return http.StatusNotFound
 		}
 
@@ -53,18 +53,8 @@ func runCommand(ps *portState, port int, command []string) int {
 			ps.scrcpyServer.Wait()
 		}
 
-		var deviceArgs []string
-
-		if config.Ports[port].Device == "usb" {
-			deviceArgs = []string{"-d"}
-		} else if config.Ports[port].Device == "tcpip" {
-			deviceArgs = []string{"-e"}
-		} else if config.Ports[port].Device != "" {
-			deviceArgs = []string{"-s", config.Ports[port].Device}
-		}
-
 		args := append(
-			deviceArgs,
+			config.Ports[port].Adb[1:],
 			"shell",
 			fmt.Sprintf("CLASSPATH=%s", config.Ports[port].ScrcpyServer[0]),
 			"app_process",
@@ -105,7 +95,7 @@ func runCommand(ps *portState, port int, command []string) int {
 			args = append(args, config.Ports[port].ScrcpyServerOptions...)
 		}
 
-		ps.scrcpyServer = exec.Command(config.Adb, args...)
+		ps.scrcpyServer = exec.Command(config.Ports[port].Adb[0], args...)
 		ps.scrcpyServer.Stdin = nil
 		ps.scrcpyServer.Stdout = os.Stdout
 		ps.scrcpyServer.Stderr = os.Stderr
