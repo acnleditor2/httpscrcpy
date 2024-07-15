@@ -125,7 +125,22 @@ func getClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		w.WriteHeader(runCommand(ps, port, []string{"getclipboard", query.Get("cut")}))
+		cut := false
+		var err error
+
+		if query.Has("cut") {
+			cut, err = strconv.ParseBool(query.Get("cut"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
+		if cut {
+			w.WriteHeader(runCommand(ps, port, []string{"getclipboardcut"}))
+		} else {
+			w.WriteHeader(runCommand(ps, port, []string{"getclipboard"}))
+		}
 	default:
 		if origin != "" {
 			w.Header().Set("Vary", "Origin")
@@ -194,12 +209,6 @@ func getClipboardSyncHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		timeout, err := time.ParseDuration(query.Get("timeout"))
-		if err != nil || timeout < 1 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -221,7 +230,30 @@ func getClipboardSyncHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		status := runCommand(ps, port, []string{"getclipboard", query.Get("cut")})
+		cut := false
+		var err error
+
+		if query.Has("cut") {
+			cut, err = strconv.ParseBool(query.Get("cut"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
+		timeout, err := time.ParseDuration(query.Get("timeout"))
+		if err != nil || timeout < 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		var status int
+
+		if cut {
+			status = runCommand(ps, port, []string{"getclipboardcut"})
+		} else {
+			status = runCommand(ps, port, []string{"getclipboard"})
+		}
 
 		if status != http.StatusNoContent {
 			w.WriteHeader(status)
@@ -306,17 +338,6 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		paste := false
-		var err error
-
-		if query.Has("paste") {
-			paste, err = strconv.ParseBool(query.Get("paste"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -331,6 +352,17 @@ func setClipboardHandler(w http.ResponseWriter, req *http.Request) {
 		if ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		paste := false
+		var err error
+
+		if query.Has("paste") {
+			paste, err = strconv.ParseBool(query.Get("paste"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 		}
 
 		text := query.Get("text")
@@ -409,6 +441,27 @@ func setClipboardSyncHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
+		ps, ok := portMap[port]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if !config.Ports[port].Control {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if config.Ports[port].ClipboardStreamExtension != "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
 		paste := false
 		var err error
 
@@ -429,27 +482,6 @@ func setClipboardSyncHandler(w http.ResponseWriter, req *http.Request) {
 		timeout, err := time.ParseDuration(query.Get("timeout"))
 		if err != nil || timeout < 1 {
 			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if !config.Ports[port].Control {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if config.Ports[port].ClipboardStreamExtension != "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if ps.controlSocket == nil {
-			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
@@ -561,11 +593,6 @@ func clipboardStreamHandler(w http.ResponseWriter, req *http.Request) {
 		}
 
 		if config.Ports[port].ClipboardStreamExtension != "" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if ps.controlSocket == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,38 +16,42 @@ import (
 )
 
 type portState struct {
-	listener                 net.Listener
-	videoSocket              net.Conn
-	audioSocket              net.Conn
-	controlSocket            net.Conn
-	connectionControlChannel chan bool
-	videoConnectedChannel    chan struct{}
-	audioConnectedChannel    chan struct{}
-	clipboardChannel         chan string
-	sendVideoSocket          net.Conn
-	sendAudioSocket          net.Conn
-	deviceName               string
-	videoCodec               uint32
-	audioCodec               uint32
-	initialVideoWidth        uint32
-	initialVideoHeight       uint32
-	scrcpyServer             *exec.Cmd
+	listener                  net.Listener
+	videoSocket               net.Conn
+	audioSocket               net.Conn
+	controlSocket             net.Conn
+	connectionControlChannel  chan bool
+	videoConnectedChannel     chan struct{}
+	audioConnectedChannel     chan struct{}
+	clipboardChannel          chan string
+	uhidKeyboardOutputChannel chan string
+	sendVideoSocket           net.Conn
+	sendAudioSocket           net.Conn
+	deviceName                string
+	videoCodec                uint32
+	audioCodec                uint32
+	initialVideoWidth         uint32
+	initialVideoHeight        uint32
+	scrcpyServer              *exec.Cmd
 }
 
 type Port struct {
-	Video                    bool     `json:"video"`
-	Audio                    bool     `json:"audio"`
-	Control                  bool     `json:"control"`
-	Forward                  bool     `json:"forward"`
-	VideoExtension           string   `json:"videoExtension"`
-	AudioExtension           string   `json:"audioExtension"`
-	ClipboardStreamExtension string   `json:"clipboardStreamExtension"`
-	Adb                      []string `json:"adb"`
-	ScrcpyServer             []string `json:"scrcpyServer"`
-	ScrcpyServerOptions      []string `json:"scrcpyServerOptions"`
-	ClipboardAutosync        bool     `json:"clipboardAutosync"`
-	Cleanup                  bool     `json:"cleanup"`
-	PowerOn                  bool     `json:"powerOn"`
+	Video                       bool     `json:"video"`
+	Audio                       bool     `json:"audio"`
+	Control                     bool     `json:"control"`
+	Forward                     bool     `json:"forward"`
+	UhidKeyboardReportDesc      string   `json:"uhidKeyboardReportDesc"`
+	UhidMouseReportDesc         string   `json:"uhidMouseReportDesc"`
+	VideoExtension              string   `json:"videoExtension"`
+	AudioExtension              string   `json:"audioExtension"`
+	ClipboardStreamExtension    string   `json:"clipboardStreamExtension"`
+	UhidKeyboardOutputExtension string   `json:"uhidKeyboardOutputExtension"`
+	ADB                         []string `json:"adb"`
+	ScrcpyServer                []string `json:"scrcpyServer"`
+	ScrcpyServerOptions         []string `json:"scrcpyServerOptions"`
+	ClipboardAutosync           bool     `json:"clipboardAutosync"`
+	Cleanup                     bool     `json:"cleanup"`
+	PowerOn                     bool     `json:"powerOn"`
 }
 
 type Config struct {
@@ -68,8 +73,8 @@ var (
 var config Config
 
 func getPort(portString string) int {
-	if portString == "" && len(portMap) == 1 {
-		for port := range portMap {
+	if portString == "" && len(config.Ports) == 1 {
+		for port := range config.Ports {
 			return port
 		}
 	}
@@ -565,7 +570,7 @@ func portsHandler(w http.ResponseWriter, req *http.Request) {
 
 		ports := map[int]Port{}
 
-		for port := range portMap {
+		for port := range config.Ports {
 			if len(config.Users) == 0 || portAllowedForUser(port, username) {
 				ports[port] = config.Ports[port]
 			}
@@ -1306,10 +1311,11 @@ func main() {
 
 	for port := range config.Ports {
 		portMap[port] = &portState{
-			connectionControlChannel: make(chan bool),
-			videoConnectedChannel:    make(chan struct{}),
-			audioConnectedChannel:    make(chan struct{}),
-			clipboardChannel:         make(chan string),
+			connectionControlChannel:  make(chan bool),
+			videoConnectedChannel:     make(chan struct{}),
+			audioConnectedChannel:     make(chan struct{}),
+			clipboardChannel:          make(chan string),
+			uhidKeyboardOutputChannel: make(chan string),
 		}
 
 		go func(p int) {
@@ -1424,6 +1430,48 @@ func main() {
 					}
 
 					if config.Ports[p].Control {
+						if config.Ports[p].UhidKeyboardReportDesc != "" {
+							reportDesc, err := hex.DecodeString(config.Ports[p].UhidKeyboardReportDesc)
+							if err != nil {
+								return
+							}
+
+							data := make([]byte, 5+len(reportDesc))
+							data[0] = 0x0C
+							data[2] = 1
+							binary.BigEndian.PutUint16(data[3:5], uint16(len(reportDesc)))
+							copy(data[5:], reportDesc)
+
+							n, err := ps.controlSocket.Write(data)
+							if err != nil {
+								return
+							}
+							if n != len(data) {
+								return
+							}
+						}
+
+						if config.Ports[p].UhidMouseReportDesc != "" {
+							reportDesc, err := hex.DecodeString(config.Ports[p].UhidMouseReportDesc)
+							if err != nil {
+								return
+							}
+
+							data := make([]byte, 5+len(reportDesc))
+							data[0] = 0x0C
+							data[2] = 2
+							binary.BigEndian.PutUint16(data[3:5], uint16(len(reportDesc)))
+							copy(data[5:], reportDesc)
+
+							n, err := ps.controlSocket.Write(data)
+							if err != nil {
+								return
+							}
+							if n != len(data) {
+								return
+							}
+						}
+
 						go func() {
 							data := make([]byte, 262144)
 
@@ -1461,7 +1509,9 @@ func main() {
 										panic(err)
 									}
 
-									ps.clipboardChannel <- string(lineBytes)
+									go func(line string) {
+										ps.clipboardChannel <- line
+									}(string(lineBytes))
 								case 1:
 									n, err = io.ReadFull(ps.controlSocket, data[1:9])
 									if err != nil {
@@ -1471,7 +1521,34 @@ func main() {
 										return
 									}
 
-									ps.clipboardChannel <- strconv.FormatUint(binary.BigEndian.Uint64(data[1:9]), 10)
+									go func(line string) {
+										ps.clipboardChannel <- line
+									}(strconv.FormatUint(binary.BigEndian.Uint64(data[1:9]), 10))
+								case 2:
+									n, err = io.ReadFull(ps.controlSocket, data[1:5])
+									if err != nil {
+										return
+									}
+									if n != 4 {
+										return
+									}
+
+									size := int(binary.BigEndian.Uint16(data[3:5]))
+
+									n, err = io.ReadFull(ps.controlSocket, data[5:5+size])
+									if err != nil {
+										return
+									}
+									if n != size {
+										return
+									}
+
+									if int(binary.BigEndian.Uint16(data[1:3])) == 1 {
+										select {
+										case ps.uhidKeyboardOutputChannel <- hex.EncodeToString(data[5 : 5+size]):
+										default:
+										}
+									}
 								}
 							}
 						}()
@@ -1596,6 +1673,13 @@ func main() {
 	}
 
 	{
+		endpoint, ok := endpointMap["/uhid-keyboard-output"]
+		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
+			http.HandleFunc("/uhid-keyboard-output", uhidKeyboardOutputStreamHandler)
+		}
+	}
+
+	{
 		endpoint, ok := endpointMap["/key"]
 		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
 			http.HandleFunc("/key", keyHandler)
@@ -1704,6 +1788,13 @@ func main() {
 		endpoint, ok := endpointMap["/scroll-down"]
 		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
 			http.HandleFunc("/scroll-down", scrollHandler)
+		}
+	}
+
+	{
+		endpoint, ok := endpointMap["/open-hard-keyboard-settings"]
+		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
+			http.HandleFunc("/open-hard-keyboard-settings", openHardKeyboardSettingsHandler)
 		}
 	}
 

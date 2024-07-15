@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
+	"encoding/hex"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -114,7 +117,7 @@ var keycodeMap = map[string]int{
 	"allapps":        284,
 }
 
-func sendKeyEvent(ps *portState, up bool, keycode int, repeat int, metaState int) bool {
+func sendKeyEventSdk(ps *portState, up bool, keycode int, repeat int, metaState int) bool {
 	data := make([]byte, 14)
 	if up {
 		data[1] = 0x01
@@ -134,25 +137,44 @@ func sendKeyEvent(ps *portState, up bool, keycode int, repeat int, metaState int
 	return true
 }
 
+func sendKeyEventUhid(ps *portState, scancode int, modifiers int) bool {
+	data := make([]byte, 13)
+	data[0] = 0x0D
+	data[2] = 0x01
+	data[4] = 0x08
+	data[5] = byte(modifiers)
+	data[7] = byte(scancode)
+
+	n, err := ps.controlSocket.Write(data)
+	if err != nil {
+		return false
+	}
+	if n != 13 {
+		return false
+	}
+
+	return true
+}
+
 func sendTouchEvent(ps *portState, action int, x int, y int, width int, height int) bool {
 	data := make([]byte, 32)
 	data[0] = 0x02
 	data[1] = byte(action)
-	data[2] = 0xff
-	data[3] = 0xff
-	data[4] = 0xff
-	data[5] = 0xff
-	data[6] = 0xff
-	data[7] = 0xff
-	data[8] = 0xff
-	data[9] = 0xfe
+	data[2] = 0xFF
+	data[3] = 0xFF
+	data[4] = 0xFF
+	data[5] = 0xFF
+	data[6] = 0xFF
+	data[7] = 0xFF
+	data[8] = 0xFF
+	data[9] = 0xFE
 	binary.BigEndian.PutUint32(data[10:], uint32(x))
 	binary.BigEndian.PutUint32(data[14:], uint32(y))
 	binary.BigEndian.PutUint16(data[18:], uint16(width))
 	binary.BigEndian.PutUint16(data[20:], uint16(height))
 	if action != 1 {
-		data[22] = 0xff
-		data[23] = 0xff
+		data[22] = 0xFF
+		data[23] = 0xFF
 	}
 	data[27] = 0x01
 	if action != 1 {
@@ -170,25 +192,25 @@ func sendTouchEvent(ps *portState, action int, x int, y int, width int, height i
 	return true
 }
 
-func sendMouseEvent(ps *portState, action int, x int, y int, width int, height int, button int) bool {
+func sendMouseEventSdk(ps *portState, action int, x int, y int, width int, height int, button int) bool {
 	data := make([]byte, 32)
 	data[0] = 0x02
 	data[1] = byte(action)
-	data[2] = 0xff
-	data[3] = 0xff
-	data[4] = 0xff
-	data[5] = 0xff
-	data[6] = 0xff
-	data[7] = 0xff
-	data[8] = 0xff
-	data[9] = 0xff
+	data[2] = 0xFF
+	data[3] = 0xFF
+	data[4] = 0xFF
+	data[5] = 0xFF
+	data[6] = 0xFF
+	data[7] = 0xFF
+	data[8] = 0xFF
+	data[9] = 0xFF
 	binary.BigEndian.PutUint32(data[10:], uint32(x))
 	binary.BigEndian.PutUint32(data[14:], uint32(y))
 	binary.BigEndian.PutUint16(data[18:], uint16(width))
 	binary.BigEndian.PutUint16(data[20:], uint16(height))
 	if action != 1 {
-		data[22] = 0xff
-		data[23] = 0xff
+		data[22] = 0xFF
+		data[23] = 0xFF
 	}
 	binary.BigEndian.PutUint32(data[24:], uint32(button))
 	if action != 1 {
@@ -206,14 +228,34 @@ func sendMouseEvent(ps *portState, action int, x int, y int, width int, height i
 	return true
 }
 
-func sendScrollEvent(ps *portState, direction string, x int, y int, width int, height int) bool {
+func sendMouseEventUhid(ps *portState, x int, y int, button int) bool {
+	data := make([]byte, 9)
+	data[0] = 0x0D
+	data[2] = 0x02
+	data[4] = 0x04
+	data[5] = byte(button)
+	data[6] = byte(x)
+	data[7] = byte(y)
+
+	n, err := ps.controlSocket.Write(data)
+	if err != nil {
+		return false
+	}
+	if n != 9 {
+		return false
+	}
+
+	return true
+}
+
+func sendScrollEventSdk(ps *portState, direction string, x int, y int, width int, height int) bool {
 	data := make([]byte, 21)
 	data[0] = 0x03
 	binary.BigEndian.PutUint32(data[1:], uint32(x))
 	binary.BigEndian.PutUint32(data[5:], uint32(y))
 	binary.BigEndian.PutUint16(data[9:], uint16(width))
 	binary.BigEndian.PutUint16(data[11:], uint16(height))
-	switch direction {
+	switch strings.ToLower(direction) {
 	case "left":
 		data[13] = 0x80
 	case "right":
@@ -237,14 +279,42 @@ func sendScrollEvent(ps *portState, direction string, x int, y int, width int, h
 	return true
 }
 
+func sendScrollEventUhid(ps *portState, direction string, x int, y int) bool {
+	data := make([]byte, 9)
+	data[0] = 0x0D
+	data[2] = 0x02
+	data[4] = 0x04
+
+	switch strings.ToLower(direction) {
+	case "up":
+		data[8] = 0x01
+	case "down":
+		data[8] = 0xFF
+	default:
+		return true
+	}
+
+	n, err := ps.controlSocket.Write(data)
+	if err != nil {
+		return false
+	}
+	if n != 9 {
+		return false
+	}
+
+	return true
+}
+
 func getButton(buttonString string) int {
 	switch strings.ToLower(buttonString) {
+	case "1", "left":
+		return 1
 	case "2", "right":
 		return 2
 	case "4", "middle":
 		return 4
 	default:
-		return 1
+		return 0
 	}
 }
 
@@ -304,56 +374,6 @@ func keyHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		keycode := 0
-		keyInPath := !strings.HasPrefix(req.URL.Path, "/key")
-		var err error
-
-		if keyInPath {
-			keycode = keycodeMap[strings.ReplaceAll(req.URL.Path[1:], "-", "")]
-		} else if query.Has("keycode") {
-			keycode, err = strconv.Atoi(query.Get("keycode"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		} else {
-			keycode = keycodeMap[strings.ToLower(query.Get("key"))]
-			if keycode == 0 {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
-		repeat := 0
-
-		if !keyInPath && query.Has("repeat") {
-			repeat, err = strconv.Atoi(query.Get("repeat"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
-		metaState := 0
-
-		if !keyInPath && query.Has("metastate") {
-			metaState, err = strconv.Atoi(query.Get("metastate"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
-		var duration time.Duration
-
-		if (keyInPath || req.URL.Path == "/key") && query.Has("duration") {
-			duration, err = time.ParseDuration(query.Get("duration"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -370,21 +390,122 @@ func keyHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if req.URL.Path != "/key-up" {
-			if !sendKeyEvent(ps, false, keycode, repeat, metaState) {
-				w.WriteHeader(http.StatusInternalServerError)
+		if query.Has("scancode") {
+			if config.Ports[port].UhidKeyboardReportDesc == "" {
+				w.WriteHeader(http.StatusNotFound)
 				return
 			}
-		}
 
-		if duration > 0 {
-			time.Sleep(duration)
-		}
-
-		if req.URL.Path != "/key-down" {
-			if !sendKeyEvent(ps, true, keycode, repeat, metaState) {
-				w.WriteHeader(http.StatusInternalServerError)
+			scancode, err := strconv.Atoi(query.Get("scancode"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
 				return
+			}
+
+			modifiers := 0
+
+			if query.Has("modifiers") {
+				modifiers, err = strconv.Atoi(query.Get("modifiers"))
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+			}
+
+			var duration time.Duration
+
+			if req.URL.Path == "/key" && query.Has("duration") {
+				duration, err = time.ParseDuration(query.Get("duration"))
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+			}
+
+			if req.URL.Path != "/key-up" {
+				if !sendKeyEventUhid(ps, scancode, modifiers) {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+			}
+
+			if duration > 0 {
+				time.Sleep(duration)
+			}
+
+			if req.URL.Path != "/key-down" {
+				if !sendKeyEventUhid(ps, 0, 0) {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+			}
+		} else {
+			keycode := 0
+			keyInPath := !strings.HasPrefix(req.URL.Path, "/key")
+			var err error
+
+			if keyInPath {
+				keycode = keycodeMap[strings.ReplaceAll(req.URL.Path[1:], "-", "")]
+			} else if query.Has("keycode") {
+				keycode, err = strconv.Atoi(query.Get("keycode"))
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+			} else {
+				keycode = keycodeMap[strings.ToLower(query.Get("key"))]
+				if keycode == 0 {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+			}
+
+			repeat := 0
+
+			if !keyInPath && query.Has("repeat") {
+				repeat, err = strconv.Atoi(query.Get("repeat"))
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+			}
+
+			metaState := 0
+
+			if !keyInPath && query.Has("metastate") {
+				metaState, err = strconv.Atoi(query.Get("metastate"))
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+			}
+
+			var duration time.Duration
+
+			if (keyInPath || req.URL.Path == "/key") && query.Has("duration") {
+				duration, err = time.ParseDuration(query.Get("duration"))
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+			}
+
+			if req.URL.Path != "/key-up" {
+				if !sendKeyEventSdk(ps, false, keycode, repeat, metaState) {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+			}
+
+			if duration > 0 {
+				time.Sleep(duration)
+			}
+
+			if req.URL.Path != "/key-down" {
+				if !sendKeyEventSdk(ps, true, keycode, repeat, metaState) {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
 			}
 		}
 
@@ -655,13 +776,34 @@ func mouseHandler(w http.ResponseWriter, req *http.Request) {
 		button := query.Get("button")
 		x := query.Get("x")
 		y := query.Get("y")
-		width := query.Get("width")
-		height := query.Get("height")
 
-		if req.URL.Path == "/mouse-click" {
-			w.WriteHeader(runCommand(ps, port, []string{"mouseclick", button, x, y, width, height, query.Get("duration")}))
+		if query.Has("width") && query.Has("height") {
+			width := query.Get("width")
+			height := query.Get("height")
+
+			if req.URL.Path == "/mouse-click" {
+				w.WriteHeader(runCommand(ps, port, []string{"mouseclick", button, x, y, width, height, query.Get("duration")}))
+			} else {
+				w.WriteHeader(runCommand(ps, port, []string{"mouse" + req.URL.Path[7:], button, x, y, width, height}))
+			}
 		} else {
-			w.WriteHeader(runCommand(ps, port, []string{"mouse" + req.URL.Path[7:], button, x, y, width, height}))
+			if button == "" && req.URL.Path != "/mouse-move" {
+				button = "1"
+			}
+
+			if x == "" {
+				x = "0"
+			}
+
+			if y == "" {
+				y = "0"
+			}
+
+			if req.URL.Path == "/mouse-click" {
+				w.WriteHeader(runCommand(ps, port, []string{"mouseclick", button, x, y, query.Get("duration")}))
+			} else {
+				w.WriteHeader(runCommand(ps, port, []string{"mouse" + req.URL.Path[7:], button, x, y}))
+			}
 		}
 	default:
 		if origin != "" {
@@ -756,5 +898,216 @@ func scrollHandler(w http.ResponseWriter, req *http.Request) {
 
 		w.Header().Set("Allow", "OPTIONS, GET")
 		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func openHardKeyboardSettingsHandler(w http.ResponseWriter, req *http.Request) {
+	origin := req.Header.Get("Origin")
+
+	w.Header().Set("Cache-Control", "no-store")
+
+	switch req.Method {
+	case http.MethodOptions:
+		if req.Header.Get("Access-Control-Request-Method") == "" {
+			w.Header().Set("Allow", "OPTIONS, GET")
+		} else if origin != "" {
+			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
+
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET")
+
+			if requestHeaders != "" {
+				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
+			}
+		}
+	case http.MethodGet:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		var username string
+		var user *User
+
+		if len(config.Users) > 0 {
+			username, user = auth(w, req)
+			if user == nil {
+				return
+			}
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+			}
+		}
+
+		query := req.URL.Query()
+
+		port := getPort(query.Get("port"))
+		if port == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		ps, ok := portMap[port]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if !config.Ports[port].Control {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if ps.controlSocket == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		w.WriteHeader(runCommand(ps, port, []string{"openhardkeyboardsettings"}))
+	default:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		w.Header().Set("Allow", "OPTIONS, GET")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func uhidKeyboardOutputStreamHandler(w http.ResponseWriter, req *http.Request) {
+	origin := req.Header.Get("Origin")
+
+	w.Header().Set("Cache-Control", "no-store")
+
+	switch req.Method {
+	case http.MethodOptions:
+		if req.Header.Get("Access-Control-Request-Method") == "" {
+			w.Header().Set("Allow", "OPTIONS, GET")
+		} else if origin != "" {
+			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
+
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET")
+
+			if requestHeaders != "" {
+				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
+			}
+		}
+	case http.MethodGet:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		var username string
+		var user *User
+
+		if len(config.Users) > 0 {
+			username, user = auth(w, req)
+			if user == nil {
+				return
+			}
+			endpoint, ok := endpointMap[req.URL.Path]
+			if ok {
+				_, ok = endpoint[username]
+				if !ok {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+			}
+		}
+
+		port := getPort(req.URL.Query().Get("port"))
+		if port == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		ps, ok := portMap[port]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if !config.Ports[port].Control {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if config.Ports[port].UhidKeyboardReportDesc == "" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if config.Ports[port].UhidKeyboardOutputExtension != "" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		var err error
+
+		for {
+			select {
+			case line := <-ps.uhidKeyboardOutputChannel:
+				_, err = fmt.Fprintln(w, line)
+				if err != nil {
+					return
+				}
+
+				w.(http.Flusher).Flush()
+			case <-req.Context().Done():
+				return
+			}
+		}
+	default:
+		if origin != "" {
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		w.Header().Set("Allow", "OPTIONS, GET")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func sendUhidKeyboardOutputToExtension(port int, ps *portState, extension *extensionState) {
+	for {
+		data, err := hex.DecodeString(<-ps.uhidKeyboardOutputChannel)
+		if err != nil {
+			ps.connectionControlChannel <- false
+			break
+		}
+
+		var b bytes.Buffer
+		b.WriteByte(7)
+		binary.Write(&b, binary.NativeEndian, uint16(port))
+		binary.Write(&b, binary.NativeEndian, uint16(len(data)))
+		b.Write(data)
+
+		extension.mutex.Lock()
+		_, err = b.WriteTo(extension.stdin)
+		extension.mutex.Unlock()
+		if err != nil {
+			ps.connectionControlChannel <- false
+			break
+		}
 	}
 }

@@ -65,17 +65,6 @@ func audioStreamHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		stripHeader := true
-		var err error
-
-		if query.Has("stripheader") {
-			stripHeader, err = strconv.ParseBool(query.Get("stripheader"))
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
 		ps, ok := portMap[port]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -85,6 +74,17 @@ func audioStreamHandler(w http.ResponseWriter, req *http.Request) {
 		if !config.Ports[port].Audio || config.Ports[port].AudioExtension != "" {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+
+		stripHeader := true
+		var err error
+
+		if query.Has("stripheader") {
+			stripHeader, err = strconv.ParseBool(query.Get("stripheader"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 		}
 
 		network := query.Get("network")

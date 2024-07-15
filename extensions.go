@@ -406,10 +406,19 @@ func loadExtensions() {
 			}
 		}
 
-		if port.Control && port.ClipboardStreamExtension != "" {
-			extension, ok := extensionMap[port.ClipboardStreamExtension]
-			if ok {
-				go sendClipboardToExtension(portNumber, portMap[portNumber], extension)
+		if port.Control {
+			if port.ClipboardStreamExtension != "" {
+				extension, ok := extensionMap[port.ClipboardStreamExtension]
+				if ok {
+					go sendClipboardToExtension(portNumber, portMap[portNumber], extension)
+				}
+			}
+
+			if port.UhidKeyboardReportDesc != "" && port.UhidKeyboardOutputExtension != "" {
+				extension, ok := extensionMap[port.UhidKeyboardOutputExtension]
+				if ok {
+					go sendUhidKeyboardOutputToExtension(portNumber, portMap[portNumber], extension)
+				}
 			}
 		}
 	}
