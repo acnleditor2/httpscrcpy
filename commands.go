@@ -80,12 +80,12 @@ func runCommand(ps *portState, port int, command []string) int {
 				args = append(args, "audio=false")
 			}
 
-			if !config.Ports[port].Control {
-				args = append(args, "control=false")
-
+			if config.Ports[port].Control {
 				if !config.Ports[port].ClipboardAutosync {
 					args = append(args, "clipboard_autosync=false")
 				}
+			} else {
+				args = append(args, "control=false")
 			}
 
 			if !config.Ports[port].Cleanup {
