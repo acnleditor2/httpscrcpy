@@ -194,6 +194,11 @@ func endpointHandler(w http.ResponseWriter, req *http.Request) {
 			case "uhidKeyboardOutputStream":
 				sendUhidKeyboardOutputStream(w, req, port)
 			case "clipboard":
+				if ps.controlSocket == nil {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+
 				var text string
 				status := getClipboard(ps, endpoint.ClipboardCut, &text, time.Duration(endpoint.ClipboardTimeout)*time.Millisecond)
 
