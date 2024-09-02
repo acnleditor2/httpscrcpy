@@ -15,7 +15,7 @@ import (
 
 func runCommands(ps *portState, port int, commands [][]string) {
 	for _, command := range commands {
-		if ps.controlSocket == nil && command[0] != "connect" && command[0] != "disconnect" && command[0] != "startscrcpyserver" && command[0] != "sleep" {
+		if ps.controlSocket == nil && command[0] != "connect" && command[0] != "startscrcpyserver" && command[0] != "sleep" {
 			return
 		}
 
