@@ -169,15 +169,11 @@ func endpointHandler(w http.ResponseWriter, req *http.Request) {
 		}
 
 		if len(endpoint.Commands) > 0 {
-			f := func(key string) string {
-				return query.Get(key)
-			}
-
 			commands := make([][]string, len(endpoint.Commands))
 			for i := range endpoint.Commands {
 				commands[i] = make([]string, len(endpoint.Commands[i]))
 				for j := range endpoint.Commands[i] {
-					commands[i][j] = os.Expand(endpoint.Commands[i][j], f)
+					commands[i][j] = os.Expand(endpoint.Commands[i][j], query.Get)
 				}
 			}
 
