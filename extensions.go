@@ -34,47 +34,12 @@ func extensionRequestHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	var username string
-	var user *User
-
-	if len(config.Users) > 0 {
-		username, user = auth(w, req)
-		if user == nil {
-			return
-		}
-		endpoint, ok := endpointMap[req.URL.Path]
-		if ok {
-			_, ok = endpoint[username]
-			if !ok {
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-		}
-	}
-
 	query := req.URL.Query()
-
-	port := getPort(query.Get("port"))
-
-	if port > 0 {
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		_, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-	}
-
 	extension := extensionMap[endpointExtensionMap[req.URL.Path]]
 
 	var b bytes.Buffer
 
 	b.WriteByte(0)
-	binary.Write(&b, binary.NativeEndian, uint16(port))
 
 	if !extension.singleEndpoint {
 		b.WriteByte(byte(len(req.URL.Path)))
@@ -221,50 +186,53 @@ func extensionRequestHandler(w http.ResponseWriter, req *http.Request) {
 			if err != nil {
 				return
 			}
-			if n != 1 || data[0] < 0 {
+			if n != 1 {
 				return
 			}
 
-			data = make([]byte, int(data[0]))
+			if data[0] > 0 {
+				data = make([]byte, int(data[0]))
 
-			n, err = io.ReadFull(extension.stdout, data)
-			if err != nil {
-				return
-			}
-			if n != len(data) {
-				return
-			}
+				n, err = io.ReadFull(extension.stdout, data)
+				if err != nil {
+					return
+				}
+				if n != len(data) {
+					return
+				}
 
-			if j == 0 {
-				commands[i][j] = strings.ToLower(string(data))
-			} else {
 				commands[i][j] = string(data)
 			}
 		}
 	}
 
 	if len(commands) > 0 {
-		go func() {
-			ps, ok := portMap[port]
+		var port int
 
-			if !ok {
-				return
+		data = make([]byte, 2)
+
+		n, err = io.ReadFull(extension.stdout, data)
+		if err != nil {
+			return
+		}
+		if n != 2 {
+			return
+		}
+
+		if len(config.Ports) == 1 {
+			for p := range config.Ports {
+				port = p
 			}
+		} else {
+			port = int(binary.NativeEndian.Uint16(data))
+		}
 
-			if !config.Ports[port].Control {
-				return
-			}
+		ps, ok := portMap[port]
+		if !ok {
+			return
+		}
 
-			for _, c := range commands {
-				if ps.controlSocket == nil && c[0] != "connect" && c[0] != "disconnect" && c[0] != "sleep" {
-					return
-				}
-
-				if runCommand(ps, port, c) != http.StatusNoContent {
-					break
-				}
-			}
-		}()
+		go runCommands(ps, port, commands)
 	}
 }
 
@@ -376,11 +344,8 @@ func loadExtensions() {
 				os.Exit(1)
 			}
 
-			endpoint, ok := endpointMap[s]
-			if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-				http.HandleFunc(s, extensionRequestHandler)
-				endpointExtensionMap[s] = extensionId
-			}
+			http.HandleFunc(s, extensionRequestHandler)
+			endpointExtensionMap[s] = extensionId
 		}
 
 		extensionMap[extensionId] = &extensionState{

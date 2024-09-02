@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type portState struct {
@@ -54,38 +55,26 @@ type Port struct {
 	PowerOn                     bool     `json:"powerOn"`
 }
 
+type Endpoint struct {
+	Port             int        `json:"port"`
+	Commands         [][]string `json:"commands"`
+	Response         string     `json:"response"`
+	ClipboardCut     bool       `json:"clipboardCut"`
+	ClipboardTimeout int        `json:"clipboardTimeout"`
+}
+
 type Config struct {
 	Address    string              `json:"address"`
 	Static     string              `json:"static"`
 	Cert       string              `json:"cert"`
 	Key        string              `json:"key"`
 	Ports      map[int]Port        `json:"ports"`
-	Users      map[string]User     `json:"users"`
-	Endpoints  map[string][]string `json:"endpoints"`
+	Endpoints  map[string]Endpoint `json:"endpoints"`
 	Extensions [][]string          `json:"extensions"`
 }
 
-var (
-	portMap     = map[int]*portState{}
-	endpointMap = map[string]map[string]struct{}{}
-)
-
+var portMap = map[int]*portState{}
 var config Config
-
-func getPort(portString string) int {
-	if portString == "" && len(config.Ports) == 1 {
-		for port := range config.Ports {
-			return port
-		}
-	}
-
-	port, err := strconv.Atoi(portString)
-	if err != nil {
-		return 0
-	}
-
-	return port
-}
 
 func readDummyByte(c net.Conn) bool {
 	data := make([]byte, 1)
@@ -128,7 +117,7 @@ func readDeviceMeta(port int) bool {
 	return true
 }
 
-func connectHandler(w http.ResponseWriter, req *http.Request) {
+func endpointHandler(w http.ResponseWriter, req *http.Request) {
 	origin := req.Header.Get("Origin")
 
 	w.Header().Set("Cache-Control", "no-store")
@@ -154,496 +143,23 @@ func connectHandler(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
 
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		port := getPort(req.URL.Query().Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(runCommand(ps, port, []string{"connect"}))
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func disconnectHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		port := getPort(req.URL.Query().Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(runCommand(ps, port, []string{"disconnect"}))
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func startScrcpyServerHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		port := getPort(req.URL.Query().Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(runCommand(ps, port, []string{"startscrcpyserver"}))
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func stopScrcpyServerHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		port := getPort(req.URL.Query().Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(runCommand(ps, port, []string{"stopscrcpyserver"}))
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func portInfoHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		port := getPort(req.URL.Query().Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		switch req.URL.Path {
-		case "/device-name":
-			if ps.deviceName == "" {
-				w.WriteHeader(http.StatusNotFound)
-			} else {
-				w.Write([]byte(ps.deviceName))
-			}
-		case "/video-codec":
-			if ps.videoCodec == 0 {
-				w.WriteHeader(http.StatusNotFound)
-			} else {
-				w.Write([]byte(strconv.FormatUint(uint64(ps.videoCodec), 10)))
-			}
-		case "/audio-codec":
-			if ps.audioCodec == 0 {
-				w.WriteHeader(http.StatusNotFound)
-			} else {
-				w.Write([]byte(strconv.FormatUint(uint64(ps.audioCodec), 10)))
-			}
-		case "/initial-video-width":
-			if ps.initialVideoWidth == 0 {
-				w.WriteHeader(http.StatusNotFound)
-			} else {
-				w.Write([]byte(strconv.FormatUint(uint64(ps.initialVideoWidth), 10)))
-			}
-		case "/initial-video-height":
-			if ps.initialVideoHeight == 0 {
-				w.WriteHeader(http.StatusNotFound)
-			} else {
-				w.Write([]byte(strconv.FormatUint(uint64(ps.initialVideoHeight), 10)))
-			}
-		}
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func portsHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		ports := map[int]Port{}
-
-		for port := range config.Ports {
-			if len(config.Users) == 0 || portAllowedForUser(port, username) {
-				ports[port] = config.Ports[port]
-			}
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ports)
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func sendDataHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
+		endpoint := config.Endpoints[req.URL.Path]
 		query := req.URL.Query()
+		var port int
+		var err error
 
-		port := getPort(query.Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
+		if len(config.Ports) == 1 {
+			for p := range config.Ports {
+				port = p
+			}
+		} else if endpoint.Port == 0 {
+			port, err = strconv.Atoi(query.Get("port"))
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		} else {
+			port = endpoint.Port
 		}
 
 		ps, ok := portMap[port]
@@ -652,612 +168,77 @@ func sendDataHandler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		if !config.Ports[port].Control {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if ps.controlSocket == nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(runCommand(ps, port, []string{"senddata", query.Get("data")}))
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func backOrScreenOnHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
+		if len(endpoint.Commands) > 0 {
+			f := func(key string) string {
+				return query.Get(key)
 			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
 
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
+			commands := make([][]string, len(endpoint.Commands))
+			for i := range endpoint.Commands {
+				commands[i] = make([]string, len(endpoint.Commands[i]))
+				for j := range endpoint.Commands[i] {
+					commands[i][j] = os.Expand(endpoint.Commands[i][j], f)
+				}
 			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
+
+			go runCommands(ps, port, commands)
+			w.WriteHeader(http.StatusNoContent)
+		} else {
+			switch endpoint.Response {
+			case "videoStream":
+				sendVideoStream(w, req, port, true)
+			case "rawVideoStream":
+				sendVideoStream(w, req, port, false)
+			case "audioStream":
+				sendAudioStream(w, req, port, true)
+			case "rawAudioStream":
+				sendAudioStream(w, req, port, false)
+			case "clipboardStream":
+				sendClipboardStream(w, req, port)
+			case "uhidKeyboardOutputStream":
+				sendUhidKeyboardOutputStream(w, req, port)
+			case "clipboard":
+				var text string
+				status := getClipboard(ps, endpoint.ClipboardCut, &text, time.Duration(endpoint.ClipboardTimeout)*time.Millisecond)
+
+				if status != http.StatusOK {
+					w.WriteHeader(status)
 					return
+				}
+
+				w.Write([]byte(text))
+			case "deviceName":
+				if ps.deviceName == "" {
+					w.WriteHeader(http.StatusNotFound)
+				} else {
+					w.Write([]byte(ps.deviceName))
+				}
+			case "videoCodec":
+				if ps.videoCodec == 0 {
+					w.WriteHeader(http.StatusNotFound)
+				} else {
+					w.Write([]byte(strconv.FormatUint(uint64(ps.videoCodec), 10)))
+				}
+			case "audioCodec":
+				if ps.audioCodec == 0 {
+					w.WriteHeader(http.StatusNotFound)
+				} else {
+					w.Write([]byte(strconv.FormatUint(uint64(ps.audioCodec), 10)))
+				}
+			case "initialVideoWidth":
+				if ps.initialVideoWidth == 0 {
+					w.WriteHeader(http.StatusNotFound)
+				} else {
+					w.Write([]byte(strconv.FormatUint(uint64(ps.initialVideoWidth), 10)))
+				}
+			case "initialVideoHeight":
+				if ps.initialVideoHeight == 0 {
+					w.WriteHeader(http.StatusNotFound)
+				} else {
+					w.Write([]byte(strconv.FormatUint(uint64(ps.initialVideoHeight), 10)))
 				}
 			}
 		}
-
-		query := req.URL.Query()
-
-		port := getPort(query.Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if !config.Ports[port].Control {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if ps.controlSocket == nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(runCommand(ps, port, []string{"backorscreenon"}))
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func expandNotificationsPanelHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		query := req.URL.Query()
-
-		port := getPort(query.Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if !config.Ports[port].Control {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if ps.controlSocket == nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(runCommand(ps, port, []string{"expandnotificationspanel"}))
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func expandSettingsPanelHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		query := req.URL.Query()
-
-		port := getPort(query.Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if !config.Ports[port].Control {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if ps.controlSocket == nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(runCommand(ps, port, []string{"expandsettingspanel"}))
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func collapsePanelsHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		query := req.URL.Query()
-
-		port := getPort(query.Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if !config.Ports[port].Control {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if ps.controlSocket == nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(runCommand(ps, port, []string{"collapsepanels"}))
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func turnScreenOnHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		query := req.URL.Query()
-
-		port := getPort(query.Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if !config.Ports[port].Control {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if ps.controlSocket == nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(runCommand(ps, port, []string{"turnscreenon"}))
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func turnScreenOffHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		query := req.URL.Query()
-
-		port := getPort(query.Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if !config.Ports[port].Control {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if ps.controlSocket == nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(runCommand(ps, port, []string{"turnscreenoff"}))
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
-func rotateHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
-
-	w.Header().Set("Cache-Control", "no-store")
-
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
-
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
-
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		query := req.URL.Query()
-
-		port := getPort(query.Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if !config.Ports[port].Control {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if ps.controlSocket == nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(runCommand(ps, port, []string{"rotate"}))
 	default:
 		if origin != "" {
 			w.Header().Set("Vary", "Origin")
@@ -1566,411 +547,27 @@ func main() {
 		}(port)
 	}
 
-	for k, v := range config.Endpoints {
-		endpointMap[k] = map[string]struct{}{}
-
-		for _, user := range v {
-			endpointMap[k][user] = struct{}{}
+	for endpointPath, endpoint := range config.Endpoints {
+		if strings.TrimSpace(endpointPath) !=
+			endpointPath || !strings.HasPrefix(endpointPath, "/") ||
+			strings.HasSuffix(endpointPath, "/") {
+			os.Exit(1)
 		}
-	}
 
-	{
-		endpoint, ok := endpointMap["/connect"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/connect", connectHandler)
+		if len(endpoint.Commands) > 0 && endpoint.Response != "" {
+			os.Exit(1)
 		}
-	}
 
-	{
-		endpoint, ok := endpointMap["/disconnect"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/disconnect", disconnectHandler)
+		if endpoint.Response != "" && endpoint.Response != "videoStream" && endpoint.Response != "rawVideoStream" && endpoint.Response != "audioStream" && endpoint.Response != "rawAudioStream" && endpoint.Response != "clipboardStream" && endpoint.Response != "uhidKeyboardOutputStream" && endpoint.Response != "clipboard" && endpoint.Response != "deviceName" && endpoint.Response != "videoCodec" && endpoint.Response != "audioCodec" && endpoint.Response != "initialVideoWidth" && endpoint.Response != "initialVideoHeight" {
+			os.Exit(1)
 		}
-	}
 
-	{
-		endpoint, ok := endpointMap["/start-scrcpy-server"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/start-scrcpy-server", startScrcpyServerHandler)
+		if endpoint.Response == "clipboard" && endpoint.ClipboardTimeout < 1 {
+			os.Exit(1)
 		}
-	}
 
-	{
-		endpoint, ok := endpointMap["/stop-scrcpy-server"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/stop-scrcpy-server", stopScrcpyServerHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/device-name"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/device-name", portInfoHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/initial-video-width"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/initial-video-width", portInfoHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/initial-video-height"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/initial-video-height", portInfoHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/video-codec"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/video-codec", portInfoHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/audio-codec"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/audio-codec", portInfoHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/ports"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/ports", portsHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/send-data"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/send-data", sendDataHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/video"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/video", videoStreamHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/audio"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/audio", audioStreamHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/clipboard"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/clipboard", clipboardStreamHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/uhid-keyboard-output"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/uhid-keyboard-output", uhidKeyboardOutputStreamHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/key"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/key", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/key-down"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/key-down", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/key-up"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/key-up", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/type"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/type", typeHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/touch"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/touch", touchHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/touch-down"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/touch-down", touchHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/touch-up"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/touch-up", touchHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/touch-move"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/touch-move", touchHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/mouse-click"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/mouse-click", mouseHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/mouse-down"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/mouse-down", mouseHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/mouse-up"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/mouse-up", mouseHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/mouse-move"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/mouse-move", mouseHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/scroll-left"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/scroll-left", scrollHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/scroll-right"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/scroll-right", scrollHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/scroll-up"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/scroll-up", scrollHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/scroll-down"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/scroll-down", scrollHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/open-hard-keyboard-settings"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/open-hard-keyboard-settings", openHardKeyboardSettingsHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/get-clipboard"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/get-clipboard", getClipboardHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/get-clipboard-sync"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/get-clipboard-sync", getClipboardSyncHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/set-clipboard"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/set-clipboard", setClipboardHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/set-clipboard-sync"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/set-clipboard-sync", setClipboardSyncHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/power"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/power", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/sleep"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/sleep", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/wake-up"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/wake-up", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/back"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/back", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/home"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/home", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/app-switch"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/app-switch", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/menu"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/menu", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/assist"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/assist", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/voice-assist"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/voice-assist", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/all-apps"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/all-apps", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/volume-up"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/volume-up", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/volume-down"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/volume-down", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/brightness-up"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/brightness-up", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/brightness-down"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/brightness-down", keyHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/back-or-screen-on"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/back-or-screen-on", backOrScreenOnHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/expand-notifications-panel"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/expand-notifications-panel", expandNotificationsPanelHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/expand-settings-panel"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/expand-settings-panel", expandSettingsPanelHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/collapse-panels"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/collapse-panels", collapsePanelsHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/turn-screen-on"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/turn-screen-on", turnScreenOnHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/turn-screen-off"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/turn-screen-off", turnScreenOffHandler)
-		}
-	}
-
-	{
-		endpoint, ok := endpointMap["/rotate"]
-		if !ok || (len(config.Users) > 0 && len(endpoint) > 0) {
-			http.HandleFunc("/rotate", rotateHandler)
-		}
+		http.HandleFunc(endpointPath,
+			endpointHandler)
 	}
 
 	loadExtensions()

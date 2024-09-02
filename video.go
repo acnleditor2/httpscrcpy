@@ -4,267 +4,116 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 )
 
-func videoStreamHandler(w http.ResponseWriter, req *http.Request) {
-	origin := req.Header.Get("Origin")
+func sendVideoStream(w http.ResponseWriter, req *http.Request, port int, header bool) {
+	ps, ok := portMap[port]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 
-	w.Header().Set("Cache-Control", "no-store")
+	if !config.Ports[port].Video || config.Ports[port].VideoExtension != "" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 
-	switch req.Method {
-	case http.MethodOptions:
-		if req.Header.Get("Access-Control-Request-Method") == "" {
-			w.Header().Set("Allow", "OPTIONS, GET")
-		} else if origin != "" {
-			requestHeaders := req.Header.Get("Access-Control-Request-Headers")
+	select {
+	case <-ps.videoConnectedChannel:
+	case <-req.Context().Done():
+		return
+	}
 
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET")
+	w.Header().Set("Device-Name", ps.deviceName)
+	w.Header().Set("Codec", strconv.FormatUint(uint64(ps.videoCodec), 10))
+	w.Header().Set("Initial-Width", strconv.FormatUint(uint64(ps.initialVideoWidth), 10))
+	w.Header().Set("Initial-Height", strconv.FormatUint(uint64(ps.initialVideoHeight), 10))
 
-			if requestHeaders != "" {
-				w.Header().Set("Access-Control-Allow-Headers", requestHeaders)
-			}
-		}
-	case http.MethodGet:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		var username string
-		var user *User
-
-		if len(config.Users) > 0 {
-			username, user = auth(w, req)
-			if user == nil {
-				return
-			}
-			endpoint, ok := endpointMap[req.URL.Path]
-			if ok {
-				_, ok = endpoint[username]
-				if !ok {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-			}
-		}
-
-		query := req.URL.Query()
-
-		port := getPort(query.Get("port"))
-		if port == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(config.Users) > 0 && !portAllowedForUser(port, username) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		ps, ok := portMap[port]
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if !config.Ports[port].Video || config.Ports[port].VideoExtension != "" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		stripHeader := true
+	if header {
+		headerBytes := make([]byte, 12)
+		var packetSize int
+		var packet []byte
+		var n int
+		var data []byte
 		var err error
 
-		if query.Has("stripheader") {
-			stripHeader, err = strconv.ParseBool(query.Get("stripheader"))
+		for {
+			n, err = io.ReadFull(ps.videoSocket, headerBytes)
 			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
+				break
 			}
-		}
-
-		network := query.Get("network")
-		address := query.Get("address")
-		var sendSocket net.Conn
-
-		if address != "" {
-			if network == "" {
-				network = "tcp"
+			if n != 12 {
+				break
 			}
 
-			sendSocket, err = net.Dial(network, address)
+			packetSize = int(binary.BigEndian.Uint32(headerBytes[8:]))
+			packet = make([]byte, packetSize)
+
+			n, err = io.ReadFull(ps.videoSocket, packet)
 			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
+				break
 			}
+			if n != packetSize {
+				break
+			}
+
+			data = make([]byte, 12+packetSize)
+			copy(data[:12], headerBytes)
+			copy(data[12:12+packetSize], packet)
+
+			n, err = w.Write(data)
+			if err != nil {
+				ps.connectionControlChannel <- false
+				break
+			}
+			if n < 12+packetSize {
+				ps.connectionControlChannel <- false
+				break
+			}
+
+			w.(http.Flusher).Flush()
 		}
+	} else {
+		headerBytes := make([]byte, 12)
+		var packetSize int
+		var packet []byte
+		var n int
+		var err error
 
-		if address == "" {
-			select {
-			case <-ps.videoConnectedChannel:
-			case <-req.Context().Done():
-				return
+		for {
+			n, err = io.ReadFull(ps.videoSocket, headerBytes)
+			if err != nil {
+				break
+			}
+			if n != 12 {
+				break
 			}
 
-			w.Header().Set("Device-Name", ps.deviceName)
-			w.Header().Set("Codec", strconv.FormatUint(uint64(ps.videoCodec), 10))
-			w.Header().Set("Initial-Width", strconv.FormatUint(uint64(ps.initialVideoWidth), 10))
-			w.Header().Set("Initial-Height", strconv.FormatUint(uint64(ps.initialVideoHeight), 10))
+			packetSize = int(binary.BigEndian.Uint32(headerBytes[8:]))
+			packet = make([]byte, packetSize)
 
-			if stripHeader {
-				headerBytes := make([]byte, 12)
-				var packetSize int
-				var packet []byte
-				var n int
-
-				for {
-					n, err = io.ReadFull(ps.videoSocket, headerBytes)
-					if err != nil {
-						break
-					}
-					if n != 12 {
-						break
-					}
-
-					packetSize = int(binary.BigEndian.Uint32(headerBytes[8:]))
-					packet = make([]byte, packetSize)
-
-					n, err = io.ReadFull(ps.videoSocket, packet)
-					if err != nil {
-						break
-					}
-					if n != packetSize {
-						break
-					}
-
-					n, err = w.Write(packet)
-					if err != nil {
-						ps.connectionControlChannel <- false
-						break
-					}
-					if n < packetSize {
-						ps.connectionControlChannel <- false
-						break
-					}
-
-					w.(http.Flusher).Flush()
-				}
-			} else {
-				headerBytes := make([]byte, 12)
-				var packetSize int
-				var packet []byte
-				var n int
-				var data []byte
-
-				for {
-					n, err = io.ReadFull(ps.videoSocket, headerBytes)
-					if err != nil {
-						break
-					}
-					if n != 12 {
-						break
-					}
-
-					packetSize = int(binary.BigEndian.Uint32(headerBytes[8:]))
-					packet = make([]byte, packetSize)
-
-					n, err = io.ReadFull(ps.videoSocket, packet)
-					if err != nil {
-						break
-					}
-					if n != packetSize {
-						break
-					}
-
-					data = make([]byte, 12+packetSize)
-					copy(data[:12], headerBytes)
-					copy(data[12:12+packetSize], packet)
-
-					n, err = w.Write(data)
-					if err != nil {
-						ps.connectionControlChannel <- false
-						break
-					}
-					if n < 12+packetSize {
-						ps.connectionControlChannel <- false
-						break
-					}
-
-					w.(http.Flusher).Flush()
-				}
+			n, err = io.ReadFull(ps.videoSocket, packet)
+			if err != nil {
+				break
 			}
-		} else {
-			w.WriteHeader(http.StatusNoContent)
-
-			select {
-			case <-ps.videoConnectedChannel:
-			case <-req.Context().Done():
-				return
+			if n != packetSize {
+				break
 			}
 
-			go func() {
-				if stripHeader {
-					headerBytes := make([]byte, 12)
-					var packetSize int
-					var packet []byte
-					var n int
-					var err error
+			n, err = w.Write(packet)
+			if err != nil {
+				ps.connectionControlChannel <- false
+				break
+			}
+			if n < packetSize {
+				ps.connectionControlChannel <- false
+				break
+			}
 
-					for {
-						n, err = io.ReadFull(ps.videoSocket, headerBytes)
-						if err != nil {
-							sendSocket.Close()
-							break
-						}
-						if n != 12 {
-							sendSocket.Close()
-							break
-						}
-
-						packetSize = int(binary.BigEndian.Uint32(headerBytes[8:]))
-						packet = make([]byte, packetSize)
-
-						n, err = io.ReadFull(ps.videoSocket, packet)
-						if err != nil {
-							sendSocket.Close()
-							break
-						}
-						if n != packetSize {
-							sendSocket.Close()
-							break
-						}
-
-						n, err = sendSocket.Write(packet)
-						if err != nil {
-							ps.connectionControlChannel <- false
-							sendSocket.Close()
-							break
-						}
-						if n != packetSize {
-							ps.connectionControlChannel <- false
-							sendSocket.Close()
-							break
-						}
-					}
-				} else {
-					io.Copy(sendSocket, ps.videoSocket)
-					sendSocket.Close()
-				}
-			}()
+			w.(http.Flusher).Flush()
 		}
-	default:
-		if origin != "" {
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		}
-
-		w.Header().Set("Allow", "OPTIONS, GET")
-		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 
