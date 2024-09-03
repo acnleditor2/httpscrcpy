@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net/http"
+	"strconv"
 )
 
 func sendAudioStream(w http.ResponseWriter, req *http.Request, port int, header bool) {
@@ -23,6 +24,13 @@ func sendAudioStream(w http.ResponseWriter, req *http.Request, port int, header 
 	case <-req.Context().Done():
 		return
 	}
+
+	if req.Header.Get("Origin") != "" {
+		w.Header().Set("Access-Control-Expose-Headers", "Device-Name, Codec")
+	}
+
+	w.Header().Set("Device-Name", ps.deviceName)
+	w.Header().Set("Codec", strconv.FormatUint(uint64(ps.audioCodec), 10))
 
 	headerBytes := make([]byte, 12)
 	var packetSize int

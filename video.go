@@ -26,18 +26,23 @@ func sendVideoStream(w http.ResponseWriter, req *http.Request, port int, header 
 		return
 	}
 
+	if req.Header.Get("Origin") != "" {
+		w.Header().Set("Access-Control-Expose-Headers", "Device-Name, Codec, Initial-Width, Initial-Height")
+	}
+
 	w.Header().Set("Device-Name", ps.deviceName)
 	w.Header().Set("Codec", strconv.FormatUint(uint64(ps.videoCodec), 10))
 	w.Header().Set("Initial-Width", strconv.FormatUint(uint64(ps.initialVideoWidth), 10))
 	w.Header().Set("Initial-Height", strconv.FormatUint(uint64(ps.initialVideoHeight), 10))
 
+	headerBytes := make([]byte, 12)
+	var packetSize int
+	var packet []byte
+	var n int
+	var err error
+
 	if header {
-		headerBytes := make([]byte, 12)
-		var packetSize int
-		var packet []byte
-		var n int
 		var data []byte
-		var err error
 
 		for {
 			n, err = io.ReadFull(ps.videoSocket, headerBytes)
@@ -76,12 +81,6 @@ func sendVideoStream(w http.ResponseWriter, req *http.Request, port int, header 
 			w.(http.Flusher).Flush()
 		}
 	} else {
-		headerBytes := make([]byte, 12)
-		var packetSize int
-		var packet []byte
-		var n int
-		var err error
-
 		for {
 			n, err = io.ReadFull(ps.videoSocket, headerBytes)
 			if err != nil {
