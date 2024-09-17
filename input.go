@@ -301,7 +301,32 @@ func sendScrollEventUhid(ps *portState, direction string, x int, y int) bool {
 	return true
 }
 
-func getButton(buttonString string) int {
+func sendGamepadInput(ps *portState, leftX int, leftY int, rightX int, rightY int, leftTrigger int, rightTrigger int, buttons int, dpad int) bool {
+	data := make([]byte, 20)
+	data[0] = 0x0D
+	data[2] = 0x03
+	data[4] = 0x0F
+	binary.LittleEndian.PutUint16(data[5:], uint16(leftX))
+	binary.LittleEndian.PutUint16(data[7:], uint16(leftY))
+	binary.LittleEndian.PutUint16(data[9:], uint16(rightX))
+	binary.LittleEndian.PutUint16(data[11:], uint16(rightY))
+	binary.LittleEndian.PutUint16(data[13:], uint16(leftTrigger))
+	binary.LittleEndian.PutUint16(data[15:], uint16(rightTrigger))
+	binary.LittleEndian.PutUint16(data[17:], uint16(buttons))
+	data[19] = byte(dpad)
+
+	n, err := ps.controlSocket.Write(data)
+	if err != nil {
+		return false
+	}
+	if n != 20 {
+		return false
+	}
+
+	return true
+}
+
+func getMouseButton(buttonString string) int {
 	switch buttonString {
 	case "1", "left":
 		return 1

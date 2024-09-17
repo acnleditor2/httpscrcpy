@@ -142,14 +142,14 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				var keycode int
 				var err error
 
-				if strings.HasSuffix(command[0], "2") {
-					keycode, err = strconv.Atoi(command[1])
-					if err != nil {
+				if command[0] == "key" {
+					keycode = keycodeMap[command[1]]
+					if keycode == 0 {
 						return
 					}
 				} else {
-					keycode = keycodeMap[command[1]]
-					if keycode == 0 {
+					keycode, err = strconv.Atoi(command[1])
+					if err != nil {
 						return
 					}
 				}
@@ -444,7 +444,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 					}
 				}
 
-				button := getButton(command[1])
+				button := getMouseButton(command[1])
 
 				if !sendMouseEventUhid(ps, x, y, button) {
 					return
@@ -486,7 +486,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 					}
 				}
 
-				button := getButton(command[1])
+				button := getMouseButton(command[1])
 
 				if !sendMouseEventSdk(ps, 0, x, y, width, height, button) {
 					return
@@ -514,7 +514,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 					return
 				}
 
-				if !sendMouseEventUhid(ps, x, y, getButton(command[1])) {
+				if !sendMouseEventUhid(ps, x, y, getMouseButton(command[1])) {
 					return
 				}
 			} else if len(command) == 6 {
@@ -538,7 +538,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 					return
 				}
 
-				if !sendMouseEventSdk(ps, 0, x, y, width, height, getButton(command[1])) {
+				if !sendMouseEventSdk(ps, 0, x, y, width, height, getMouseButton(command[1])) {
 					return
 				}
 			} else {
@@ -570,7 +570,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 					return
 				}
 
-				if !sendMouseEventSdk(ps, 1, x, y, width, height, getButton(command[1])) {
+				if !sendMouseEventSdk(ps, 1, x, y, width, height, getMouseButton(command[1])) {
 					return
 				}
 			} else {
@@ -602,7 +602,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 					return
 				}
 
-				if !sendMouseEventUhid(ps, x, y, getButton(command[1])) {
+				if !sendMouseEventUhid(ps, x, y, getMouseButton(command[1])) {
 					return
 				}
 			} else if len(command) == 6 {
@@ -626,7 +626,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 					return
 				}
 
-				if !sendMouseEventSdk(ps, 2, x, y, width, height, getButton(command[1])) {
+				if !sendMouseEventSdk(ps, 2, x, y, width, height, getMouseButton(command[1])) {
 					return
 				}
 			} else {
@@ -674,9 +674,57 @@ func runCommands(ps *portState, port int, commands [][]string) {
 			} else {
 				return
 			}
+		case "gamepadinput":
+			if len(command) == 9 {
+				leftX, err := strconv.Atoi(command[1])
+				if err != nil {
+					return
+				}
+
+				leftY, err := strconv.Atoi(command[2])
+				if err != nil {
+					return
+				}
+
+				rightX, err := strconv.Atoi(command[3])
+				if err != nil {
+					return
+				}
+
+				rightY, err := strconv.Atoi(command[4])
+				if err != nil {
+					return
+				}
+
+				leftTrigger, err := strconv.Atoi(command[5])
+				if err != nil {
+					return
+				}
+
+				rightTrigger, err := strconv.Atoi(command[6])
+				if err != nil {
+					return
+				}
+
+				buttons, err := strconv.Atoi(command[7])
+				if err != nil {
+					return
+				}
+
+				dpad, err := strconv.Atoi(command[8])
+				if err != nil {
+					return
+				}
+
+				if !sendGamepadInput(ps, leftX, leftY, rightX, rightY, leftTrigger, rightTrigger, buttons, dpad) {
+					return
+				}
+			} else {
+				return
+			}
 		case "openhardkeyboardsettings":
 			if len(command) == 1 {
-				n, err := ps.controlSocket.Write([]byte{0x0E})
+				n, err := ps.controlSocket.Write([]byte{0x0F})
 				if err != nil {
 					return
 				}

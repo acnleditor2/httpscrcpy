@@ -43,6 +43,7 @@ type Port struct {
 	Forward                     bool     `json:"forward"`
 	UhidKeyboardReportDesc      string   `json:"uhidKeyboardReportDesc"`
 	UhidMouseReportDesc         string   `json:"uhidMouseReportDesc"`
+	UhidGamepadReportDesc       string   `json:"uhidGamepadReportDesc"`
 	VideoExtension              string   `json:"videoExtension"`
 	AudioExtension              string   `json:"audioExtension"`
 	ClipboardStreamExtension    string   `json:"clipboardStreamExtension"`
@@ -418,11 +419,11 @@ func main() {
 								return
 							}
 
-							data := make([]byte, 5+len(reportDesc))
+							data := make([]byte, 6+len(reportDesc))
 							data[0] = 0x0C
-							data[2] = 1
-							binary.BigEndian.PutUint16(data[3:5], uint16(len(reportDesc)))
-							copy(data[5:], reportDesc)
+							data[2] = 0x01
+							binary.BigEndian.PutUint16(data[4:6], uint16(len(reportDesc)))
+							copy(data[6:], reportDesc)
 
 							n, err := ps.controlSocket.Write(data)
 							if err != nil {
@@ -439,11 +440,32 @@ func main() {
 								return
 							}
 
-							data := make([]byte, 5+len(reportDesc))
+							data := make([]byte, 6+len(reportDesc))
 							data[0] = 0x0C
-							data[2] = 2
-							binary.BigEndian.PutUint16(data[3:5], uint16(len(reportDesc)))
-							copy(data[5:], reportDesc)
+							data[2] = 0x02
+							binary.BigEndian.PutUint16(data[4:6], uint16(len(reportDesc)))
+							copy(data[6:], reportDesc)
+
+							n, err := ps.controlSocket.Write(data)
+							if err != nil {
+								return
+							}
+							if n != len(data) {
+								return
+							}
+						}
+
+						if config.Ports[p].UhidGamepadReportDesc != "" {
+							reportDesc, err := hex.DecodeString(config.Ports[p].UhidGamepadReportDesc)
+							if err != nil {
+								return
+							}
+
+							data := make([]byte, 6+len(reportDesc))
+							data[0] = 0x0C
+							data[2] = 0x03
+							binary.BigEndian.PutUint16(data[4:6], uint16(len(reportDesc)))
+							copy(data[6:], reportDesc)
 
 							n, err := ps.controlSocket.Write(data)
 							if err != nil {
