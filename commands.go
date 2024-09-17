@@ -138,7 +138,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				return
 			}
 		case "key", "key2":
-			if len(command) == 2 || len(command) == 3 || len(command) == 5 {
+			if len(command) == 2 || len(command) == 5 {
 				var keycode int
 				var err error
 
@@ -154,22 +154,9 @@ func runCommands(ps *portState, port int, commands [][]string) {
 					}
 				}
 
-				if len(command) == 2 || len(command) == 3 {
-					var duration time.Duration
-
-					if len(command) == 3 {
-						duration, err = time.ParseDuration(command[2])
-						if err != nil {
-							return
-						}
-					}
-
+				if len(command) == 2 {
 					if !sendKeyEventSdk(ps, false, keycode, 0, 0) {
 						return
-					}
-
-					if duration > 0 {
-						time.Sleep(duration)
 					}
 
 					if !sendKeyEventSdk(ps, true, keycode, 0, 0) {
@@ -199,52 +186,30 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				return
 			}
 		case "key3":
-			if (len(command) == 2 || len(command) == 3 || len(command) == 4) && config.Ports[port].UhidKeyboardReportDesc != "" {
+			if (len(command) == 2 || len(command) == 3) && config.Ports[port].UhidKeyboardReportDesc != "" {
 				scancode, err := strconv.Atoi(command[1])
 				if err != nil {
 					return
 				}
 
-				if len(command) == 2 || len(command) == 3 {
-					var duration time.Duration
-
-					if len(command) == 3 {
-						duration, err = time.ParseDuration(command[2])
-						if err != nil {
-							return
-						}
-					}
-
+				if len(command) == 2 {
 					if !sendKeyEventUhid(ps, scancode, 0) {
 						return
 					}
 
-					if duration > 0 {
-						time.Sleep(duration)
-					}
-
-					if !sendKeyEventUhid(ps, 0, 0) {
-						return
+					if scancode != 0 {
+						if !sendKeyEventUhid(ps, 0, 0) {
+							return
+						}
 					}
 				} else {
-					up, err := strconv.ParseBool(command[3])
+					modifiers, err := strconv.Atoi(command[2])
 					if err != nil {
 						return
 					}
 
-					if up {
-						if !sendKeyEventUhid(ps, 0, 0) {
-							return
-						}
-					} else {
-						modifiers, err := strconv.Atoi(command[4])
-						if err != nil {
-							return
-						}
-
-						if !sendKeyEventUhid(ps, scancode, modifiers) {
-							return
-						}
+					if !sendKeyEventUhid(ps, scancode, modifiers) {
+						return
 					}
 				}
 			} else {
@@ -296,7 +261,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				return
 			}
 		case "touch":
-			if len(command) == 5 || len(command) == 6 {
+			if len(command) == 5 {
 				x, err := strconv.Atoi(command[1])
 				if err != nil {
 					return
@@ -317,21 +282,8 @@ func runCommands(ps *portState, port int, commands [][]string) {
 					return
 				}
 
-				var duration time.Duration
-
-				if len(command) == 6 && command[5] != "" {
-					duration, err = time.ParseDuration(command[5])
-					if err != nil {
-						return
-					}
-				}
-
 				if !sendTouchEvent(ps, 0, x, y, width, height) {
 					return
-				}
-
-				if duration > 0 {
-					time.Sleep(duration)
 				}
 
 				if !sendTouchEvent(ps, 1, x, y, width, height) {
@@ -425,7 +377,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				return
 			}
 		case "mouseclick":
-			if (len(command) == 4 || len(command) == 5) && config.Ports[port].UhidMouseReportDesc != "" {
+			if len(command) == 4 && config.Ports[port].UhidMouseReportDesc != "" {
 				x, err := strconv.Atoi(command[2])
 				if err != nil {
 					return
@@ -436,28 +388,16 @@ func runCommands(ps *portState, port int, commands [][]string) {
 					return
 				}
 
-				var duration time.Duration
-				if len(command) == 5 && command[4] != "" {
-					duration, err = time.ParseDuration(command[4])
-					if err != nil {
-						return
-					}
-				}
-
 				button := getMouseButton(command[1])
 
 				if !sendMouseEventUhid(ps, x, y, button) {
 					return
 				}
 
-				if duration > 0 {
-					time.Sleep(duration)
-				}
-
 				if !sendMouseEventUhid(ps, 0, 0, 0) {
 					return
 				}
-			} else if len(command) == 6 || len(command) == 7 {
+			} else if len(command) == 6 {
 				x, err := strconv.Atoi(command[2])
 				if err != nil {
 					return
@@ -478,22 +418,10 @@ func runCommands(ps *portState, port int, commands [][]string) {
 					return
 				}
 
-				var duration time.Duration
-				if len(command) == 7 && command[6] != "" {
-					duration, err = time.ParseDuration(command[6])
-					if err != nil {
-						return
-					}
-				}
-
 				button := getMouseButton(command[1])
 
 				if !sendMouseEventSdk(ps, 0, x, y, width, height, button) {
 					return
-				}
-
-				if duration > 0 {
-					time.Sleep(duration)
 				}
 
 				if !sendMouseEventSdk(ps, 1, x, y, width, height, button) {
