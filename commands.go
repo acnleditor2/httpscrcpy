@@ -15,7 +15,7 @@ import (
 
 func runCommands(ps *portState, port int, commands [][]string) {
 	for _, command := range commands {
-		if ps.controlSocket == nil && command[0] != "connect" && command[0] != "startscrcpyserver" && command[0] != "sleep" {
+		if ps.controlSocket == nil && command[0] != "connect" && command[0] != "startscrcpyserver" && command[0] != "sleep" && command[0] != "adb" {
 			return
 		}
 
@@ -108,7 +108,6 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				}
 
 				ps.scrcpyServer = exec.Command(config.Ports[port].ADB[0], args...)
-				ps.scrcpyServer.Stdin = nil
 				ps.scrcpyServer.Stdout = os.Stdout
 				ps.scrcpyServer.Stderr = os.Stderr
 
@@ -829,6 +828,20 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				}
 
 				time.Sleep(duration)
+			} else {
+				return
+			}
+		case "adb":
+			if len(command) > 1 {
+				args := append(config.Ports[port].ADB[1:], command[1:]...)
+
+				cmd := exec.Command(config.Ports[port].ADB[0], args...)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+
+				if cmd.Run() != nil {
+					return
+				}
 			} else {
 				return
 			}
