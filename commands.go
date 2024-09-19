@@ -833,9 +833,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 			}
 		case "adb":
 			if len(command) > 1 {
-				args := append(config.Ports[port].ADB[1:], command[1:]...)
-
-				cmd := exec.Command(config.Ports[port].ADB[0], args...)
+				cmd := exec.Command(config.Ports[port].ADB[0], command[1:]...)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 
