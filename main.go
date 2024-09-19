@@ -48,7 +48,7 @@ type Port struct {
 	AudioExtension              string   `json:"audioExtension"`
 	ClipboardStreamExtension    string   `json:"clipboardStreamExtension"`
 	UhidKeyboardOutputExtension string   `json:"uhidKeyboardOutputExtension"`
-	ADB                         []string `json:"adb"`
+	Adb                         []string `json:"adb"`
 	ScrcpyServer                []string `json:"scrcpyServer"`
 	ScrcpyServerOptions         []string `json:"scrcpyServerOptions"`
 	ClipboardAutosync           bool     `json:"clipboardAutosync"`

@@ -46,7 +46,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 			}
 		case "startscrcpyserver":
 			if len(command) == 1 {
-				if len(config.Ports[port].ADB) == 0 {
+				if len(config.Ports[port].Adb) == 0 {
 					return
 				}
 
@@ -66,7 +66,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				}
 
 				args := append(
-					config.Ports[port].ADB[1:],
+					config.Ports[port].Adb[1:],
 					"shell",
 					fmt.Sprintf("CLASSPATH=%s", config.Ports[port].ScrcpyServer[0]),
 					"app_process",
@@ -107,7 +107,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 					args = append(args, config.Ports[port].ScrcpyServerOptions...)
 				}
 
-				ps.scrcpyServer = exec.Command(config.Ports[port].ADB[0], args...)
+				ps.scrcpyServer = exec.Command(config.Ports[port].Adb[0], args...)
 				ps.scrcpyServer.Stdout = os.Stdout
 				ps.scrcpyServer.Stderr = os.Stderr
 
@@ -833,7 +833,9 @@ func runCommands(ps *portState, port int, commands [][]string) {
 			}
 		case "adb":
 			if len(command) > 1 {
-				cmd := exec.Command(config.Ports[port].ADB[0], command[1:]...)
+				args := append(config.Ports[port].Adb[1:], command[1:]...)
+
+				cmd := exec.Command(config.Ports[port].Adb[0], args...)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 
