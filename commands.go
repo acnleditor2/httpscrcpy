@@ -45,77 +45,77 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				return
 			}
 		case "startscrcpyserver":
-			if len(command) == 1 {
-				if len(config.Ports[port].Adb) == 0 {
-					return
+			if len(config.Ports[port].Adb) == 0 {
+				return
+			}
+
+			if len(config.Ports[port].ScrcpyServer) != 2 {
+				return
+			}
+
+			if ps.scrcpyServer != nil {
+				select {
+				case ps.connectionControlChannel <- false:
+					time.Sleep(1 * time.Second)
+				default:
 				}
 
-				if len(config.Ports[port].ScrcpyServer) != 2 {
-					return
-				}
+				ps.scrcpyServer.Process.Kill()
+				ps.scrcpyServer.Wait()
+			}
 
-				if ps.scrcpyServer != nil {
-					select {
-					case ps.connectionControlChannel <- false:
-						time.Sleep(1 * time.Second)
-					default:
-					}
+			args := append(
+				config.Ports[port].Adb[1:],
+				"shell",
+				fmt.Sprintf("CLASSPATH=%s", config.Ports[port].ScrcpyServer[0]),
+				"app_process",
+				"/",
+				"com.genymobile.scrcpy.Server",
+				config.Ports[port].ScrcpyServer[1],
+			)
 
-					ps.scrcpyServer.Process.Kill()
-					ps.scrcpyServer.Wait()
-				}
+			if !config.Ports[port].Video {
+				args = append(args, "video=false")
+			}
 
-				args := append(
-					config.Ports[port].Adb[1:],
-					"shell",
-					fmt.Sprintf("CLASSPATH=%s", config.Ports[port].ScrcpyServer[0]),
-					"app_process",
-					"/",
-					"com.genymobile.scrcpy.Server",
-					config.Ports[port].ScrcpyServer[1],
-				)
+			if !config.Ports[port].Audio {
+				args = append(args, "audio=false")
+			}
 
-				if !config.Ports[port].Video {
-					args = append(args, "video=false")
-				}
-
-				if !config.Ports[port].Audio {
-					args = append(args, "audio=false")
-				}
-
-				if config.Ports[port].Control {
-					if !config.Ports[port].ClipboardAutosync {
-						args = append(args, "clipboard_autosync=false")
-					}
-				} else {
-					args = append(args, "control=false")
-				}
-
-				if !config.Ports[port].Cleanup {
-					args = append(args, "cleanup=false")
-				}
-
-				if !config.Ports[port].PowerOn {
-					args = append(args, "power_on=false")
-				}
-
-				if config.Ports[port].Forward {
-					args = append(args, "tunnel_forward=true")
-				}
-
-				if len(config.Ports[port].ScrcpyServerOptions) > 0 {
-					args = append(args, config.Ports[port].ScrcpyServerOptions...)
-				}
-
-				ps.scrcpyServer = exec.Command(config.Ports[port].Adb[0], args...)
-				ps.scrcpyServer.Stdout = os.Stdout
-				ps.scrcpyServer.Stderr = os.Stderr
-
-				if ps.scrcpyServer.Start() != nil {
-					ps.scrcpyServer = nil
-					return
+			if config.Ports[port].Control {
+				if !config.Ports[port].ClipboardAutosync {
+					args = append(args, "clipboard_autosync=false")
 				}
 			} else {
+				args = append(args, "control=false")
+			}
+
+			if !config.Ports[port].Cleanup {
+				args = append(args, "cleanup=false")
+			}
+
+			if !config.Ports[port].PowerOn {
+				args = append(args, "power_on=false")
+			}
+
+			if config.Ports[port].Forward {
+				args = append(args, "tunnel_forward=true")
+			}
+
+			if len(config.Ports[port].ScrcpyServerOptions) > 0 {
+				args = append(args, config.Ports[port].ScrcpyServerOptions...)
+			}
+
+			if len(command) > 1 {
+				args = append(args, command[1:]...)
+			}
+
+			ps.scrcpyServer = exec.Command(config.Ports[port].Adb[0], args...)
+			ps.scrcpyServer.Stdout = os.Stdout
+			ps.scrcpyServer.Stderr = os.Stderr
+
+			if ps.scrcpyServer.Start() != nil {
+				ps.scrcpyServer = nil
 				return
 			}
 		case "stopscrcpyserver":
