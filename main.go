@@ -313,66 +313,88 @@ func main() {
 			}
 
 			for connect := range ps.connectionControlChannel {
-				if ps.videoSocket != nil {
-					ps.videoSocket.Close()
-				}
-
-				if ps.audioSocket != nil {
-					ps.audioSocket.Close()
-				}
-
-				if ps.controlSocket != nil {
-					ps.controlSocket.Close()
-				}
-
 				if connect {
-					if config.Ports[p].Video {
-						if config.Ports[p].Forward {
-							ps.videoSocket, err = net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", p))
-							if err != nil {
-								return
+					if config.Ports[p].Forward {
+						for i := 0; i < 100; i++ {
+							if ps.videoSocket != nil {
+								ps.videoSocket.Close()
 							}
 
-							if !readDummyByte(ps.videoSocket) {
-								continue
+							if ps.audioSocket != nil {
+								ps.audioSocket.Close()
 							}
-						} else {
+
+							if ps.controlSocket != nil {
+								ps.controlSocket.Close()
+							}
+
+							if i != 0 {
+								time.Sleep(100 * time.Millisecond)
+							}
+
+							if config.Ports[p].Video {
+								ps.videoSocket, err = net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", p))
+								if err != nil {
+									return
+								}
+
+								if !readDummyByte(ps.videoSocket) {
+									continue
+								}
+							}
+
+							if config.Ports[p].Audio {
+								ps.audioSocket, err = net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", p))
+								if err != nil {
+									return
+								}
+
+								if !config.Ports[p].Video && !readDummyByte(ps.audioSocket) {
+									continue
+								}
+							}
+
+							if config.Ports[p].Control {
+								ps.controlSocket, err = net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", p))
+								if err != nil {
+									return
+								}
+
+								if !config.Ports[p].Video && !config.Ports[p].Audio && !readDummyByte(ps.controlSocket) {
+									continue
+								}
+							}
+
+							break
+						}
+					} else {
+						if ps.videoSocket != nil {
+							ps.videoSocket.Close()
+						}
+
+						if ps.audioSocket != nil {
+							ps.audioSocket.Close()
+						}
+
+						if ps.controlSocket != nil {
+							ps.controlSocket.Close()
+						}
+
+						if config.Ports[p].Video {
 							ps.videoSocket, err = ps.listener.Accept()
 							if err != nil {
 								return
 							}
 						}
-					}
 
-					if config.Ports[p].Audio {
-						if config.Ports[p].Forward {
-							ps.audioSocket, err = net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", p))
-							if err != nil {
-								return
-							}
-
-							if !config.Ports[p].Video && !readDummyByte(ps.audioSocket) {
-								continue
-							}
-						} else {
+						if config.Ports[p].Audio {
 							ps.audioSocket, err = ps.listener.Accept()
 							if err != nil {
 								return
 							}
 						}
-					}
 
-					if config.Ports[p].Control {
-						if config.Ports[p].Forward {
-							ps.controlSocket, err = net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", p))
-							if err != nil {
-								return
-							}
-
-							if !config.Ports[p].Video && !config.Ports[p].Audio && !readDummyByte(ps.controlSocket) {
-								continue
-							}
-						} else {
+						if config.Ports[p].Control {
 							ps.controlSocket, err = ps.listener.Accept()
 							if err != nil {
 								return
@@ -564,6 +586,18 @@ func main() {
 
 					if config.Ports[p].Audio {
 						ps.audioConnectedChannel <- struct{}{}
+					}
+				} else {
+					if ps.videoSocket != nil {
+						ps.videoSocket.Close()
+					}
+
+					if ps.audioSocket != nil {
+						ps.audioSocket.Close()
+					}
+
+					if ps.controlSocket != nil {
+						ps.controlSocket.Close()
 					}
 				}
 			}
