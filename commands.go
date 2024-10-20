@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,7 +16,7 @@ import (
 
 func runCommands(ps *portState, port int, commands [][]string) {
 	for _, command := range commands {
-		if ps.controlSocket == nil && command[0] != "connect" && command[0] != "startscrcpyserver" && command[0] != "sleep" && command[0] != "adb" {
+		if ps.controlSocket == nil && command[0] != "connect" && command[0] != "startscrcpyserver" && command[0] != "sleep" && command[0] != "adb" && command[0] != "setconnectedcommands" {
 			return
 		}
 
@@ -800,6 +801,23 @@ func runCommands(ps *portState, port int, commands [][]string) {
 			} else {
 				return
 			}
+		case "startapp":
+			if len(command) == 2 {
+				data := make([]byte, 2+len(command[1]))
+				data[0] = 0x10
+				data[1] = byte(len(command[1]))
+				copy(data[2:], []byte(command[1]))
+
+				n, err := ps.controlSocket.Write(data)
+				if err != nil {
+					return
+				}
+				if n != len(data) {
+					return
+				}
+			} else {
+				return
+			}
 		case "senddata":
 			if len(command) == 2 {
 				data, err := hex.DecodeString(command[1])
@@ -842,6 +860,14 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				if cmd.Run() != nil {
 					return
 				}
+			} else {
+				return
+			}
+		case "setconnectedcommands":
+			if len(command) == 2 {
+				defer func(connectedCommands string) {
+					json.Unmarshal([]byte(connectedCommands), &ps.connectedCommands)
+				}(command[1])
 			} else {
 				return
 			}

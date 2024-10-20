@@ -34,26 +34,28 @@ type portState struct {
 	initialVideoWidth         uint32
 	initialVideoHeight        uint32
 	scrcpyServer              *exec.Cmd
+	connectedCommands         [][]string
 }
 
 type Port struct {
-	Video                       bool     `json:"video"`
-	Audio                       bool     `json:"audio"`
-	Control                     bool     `json:"control"`
-	Forward                     bool     `json:"forward"`
-	UhidKeyboardReportDesc      string   `json:"uhidKeyboardReportDesc"`
-	UhidMouseReportDesc         string   `json:"uhidMouseReportDesc"`
-	UhidGamepadReportDesc       string   `json:"uhidGamepadReportDesc"`
-	VideoExtension              string   `json:"videoExtension"`
-	AudioExtension              string   `json:"audioExtension"`
-	ClipboardStreamExtension    string   `json:"clipboardStreamExtension"`
-	UhidKeyboardOutputExtension string   `json:"uhidKeyboardOutputExtension"`
-	Adb                         []string `json:"adb"`
-	ScrcpyServer                []string `json:"scrcpyServer"`
-	ScrcpyServerOptions         []string `json:"scrcpyServerOptions"`
-	ClipboardAutosync           bool     `json:"clipboardAutosync"`
-	Cleanup                     bool     `json:"cleanup"`
-	PowerOn                     bool     `json:"powerOn"`
+	Video                       bool       `json:"video"`
+	Audio                       bool       `json:"audio"`
+	Control                     bool       `json:"control"`
+	Forward                     bool       `json:"forward"`
+	UhidKeyboardReportDesc      string     `json:"uhidKeyboardReportDesc"`
+	UhidMouseReportDesc         string     `json:"uhidMouseReportDesc"`
+	UhidGamepadReportDesc       string     `json:"uhidGamepadReportDesc"`
+	VideoExtension              string     `json:"videoExtension"`
+	AudioExtension              string     `json:"audioExtension"`
+	ClipboardStreamExtension    string     `json:"clipboardStreamExtension"`
+	UhidKeyboardOutputExtension string     `json:"uhidKeyboardOutputExtension"`
+	Adb                         []string   `json:"adb"`
+	ScrcpyServer                []string   `json:"scrcpyServer"`
+	ScrcpyServerOptions         []string   `json:"scrcpyServerOptions"`
+	ClipboardAutosync           bool       `json:"clipboardAutosync"`
+	Cleanup                     bool       `json:"cleanup"`
+	PowerOn                     bool       `json:"powerOn"`
+	ConnectedCommands           [][]string `json:"connectedCommands"`
 }
 
 type Endpoint struct {
@@ -299,6 +301,7 @@ func main() {
 			audioConnectedChannel:     make(chan struct{}),
 			clipboardChannel:          make(chan string),
 			uhidKeyboardOutputChannel: make(chan string),
+			connectedCommands:         config.Ports[port].ConnectedCommands,
 		}
 
 		go func(p int) {
@@ -586,6 +589,10 @@ func main() {
 
 					if config.Ports[p].Audio {
 						ps.audioConnectedChannel <- struct{}{}
+					}
+
+					if len(ps.connectedCommands) > 0 {
+						go runCommands(ps, port, ps.connectedCommands)
 					}
 				} else {
 					if ps.videoSocket != nil {
