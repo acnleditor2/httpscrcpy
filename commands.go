@@ -46,7 +46,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				return
 			}
 		case "startscrcpyserver":
-			if len(config.Ports[port].Adb) == 0 {
+			if len(config.Adb) == 0 && len(config.Ports[port].Adb) == 0 {
 				return
 			}
 
@@ -65,8 +65,27 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				ps.scrcpyServer.Wait()
 			}
 
-			args := append(
-				config.Ports[port].Adb[1:],
+			var adb []string
+			var args []string
+
+			if len(config.Ports[port].Adb) > 0 {
+				adb = config.Ports[port].Adb
+			} else {
+				adb = config.Adb
+			}
+
+			if config.Ports[port].Device == "usb" {
+				args = append(adb[1:], "-d")
+			} else if config.Ports[port].Device == "tcpip" {
+				args = append(adb[1:], "-e")
+			} else if config.Ports[port].Device != "" {
+				args = append(adb[1:], "-s", config.Ports[port].Device)
+			} else {
+				args = adb[1:]
+			}
+
+			args = append(
+				args,
 				"shell",
 				fmt.Sprintf("CLASSPATH=%s", config.Ports[port].ScrcpyServer[0]),
 				"app_process",
@@ -111,7 +130,7 @@ func runCommands(ps *portState, port int, commands [][]string) {
 				args = append(args, command[1:]...)
 			}
 
-			ps.scrcpyServer = exec.Command(config.Ports[port].Adb[0], args...)
+			ps.scrcpyServer = exec.Command(adb[0], args...)
 			ps.scrcpyServer.Stdout = os.Stdout
 			ps.scrcpyServer.Stderr = os.Stderr
 
@@ -851,9 +870,26 @@ func runCommands(ps *portState, port int, commands [][]string) {
 			}
 		case "adb":
 			if len(command) > 1 {
-				args := append(config.Ports[port].Adb[1:], command[1:]...)
+				var adb []string
+				var args []string
 
-				cmd := exec.Command(config.Ports[port].Adb[0], args...)
+				if len(config.Ports[port].Adb) > 0 {
+					adb = config.Ports[port].Adb
+				} else {
+					adb = config.Adb
+				}
+
+				if config.Ports[port].Device == "usb" {
+					args = append(adb[1:], "-d")
+				} else if config.Ports[port].Device == "tcpip" {
+					args = append(adb[1:], "-e")
+				} else if config.Ports[port].Device != "" {
+					args = append(adb[1:], "-s", config.Ports[port].Device)
+				}
+
+				args = append(args, command[1:]...)
+
+				cmd := exec.Command(adb[0], args...)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 

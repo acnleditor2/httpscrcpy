@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"io"
 	"net/http"
+	"os"
+	"os/exec"
 	"strconv"
 )
 
@@ -15,7 +17,7 @@ func sendVideoStream(w http.ResponseWriter, req *http.Request, port int, header 
 		return
 	}
 
-	if !config.Ports[port].Video || config.Ports[port].VideoExtension != "" {
+	if !config.Ports[port].Video || (!config.Ports[port].VideoStream && (config.Ports[port].Ffmpeg != "" || config.Ffmpeg != "")) || config.Ports[port].VideoExtension != "" {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -32,8 +34,8 @@ func sendVideoStream(w http.ResponseWriter, req *http.Request, port int, header 
 
 	w.Header().Set("Device-Name", ps.deviceName)
 	w.Header().Set("Codec", strconv.FormatUint(uint64(ps.videoCodec), 10))
-	w.Header().Set("Initial-Width", strconv.FormatUint(uint64(ps.initialVideoWidth), 10))
-	w.Header().Set("Initial-Height", strconv.FormatUint(uint64(ps.initialVideoHeight), 10))
+	w.Header().Set("Initial-Width", strconv.Itoa(ps.initialVideoWidth))
+	w.Header().Set("Initial-Height", strconv.Itoa(ps.initialVideoHeight))
 
 	headerBytes := make([]byte, 12)
 	var packetSize int
@@ -114,6 +116,186 @@ func sendVideoStream(w http.ResponseWriter, req *http.Request, port int, header 
 			w.(http.Flusher).Flush()
 		}
 	}
+}
+
+func sendVideoToFfmpeg(port int, ps *portState) {
+	headerBytes := make([]byte, 12)
+	var err error
+	var packetSize int
+	var packet []byte
+	var n int
+	var ffmpeg *exec.Cmd
+	var ffmpegStdin io.WriteCloser
+	var ffmpegStdout io.ReadCloser
+
+	for {
+		<-ps.videoConnectedChannel
+
+		videoFrameSize := ps.initialVideoWidth * ps.initialVideoHeight * map[bool]int{
+			false: 3,
+			true:  4,
+		}[config.Ports[port].VideoFrameAlpha]
+
+		ps.videoFrameMutex.Lock()
+		if len(ps.videoFrame) != videoFrameSize {
+			ps.videoFrame = make([]byte, videoFrameSize)
+		}
+		ps.videoFrameMutex.Unlock()
+
+		if ffmpeg != nil {
+			ffmpeg.Process.Kill()
+			ffmpeg.Wait()
+		}
+
+		ffmpeg = exec.Command(
+			func() string {
+				if config.Ports[port].Ffmpeg != "" {
+					return config.Ports[port].Ffmpeg
+				}
+				return config.Ffmpeg
+			}(),
+			"-probesize",
+			"32",
+			"-analyzeduration",
+			"0",
+			"-re",
+			"-f",
+			map[uint32]string{
+				0x68323634: "h264",
+				0x68323635: "hevc",
+				0x617631:   "av1",
+			}[ps.videoCodec],
+			"-i",
+			"-",
+			"-f",
+			"rawvideo",
+			"-pix_fmt",
+			map[bool]string{
+				false: "rgb24",
+				true:  "rgba",
+			}[config.Ports[port].VideoFrameAlpha],
+			"-vf",
+			func() string {
+				if ps.initialVideoWidth >= ps.initialVideoHeight {
+					return "transpose=1:landscape"
+				} else {
+					return "transpose=1:portrait"
+				}
+			}(),
+			"-",
+		)
+
+		ffmpeg.Stderr = os.Stderr
+
+		ffmpegStdin, err = ffmpeg.StdinPipe()
+		if err != nil {
+			return
+		}
+
+		ffmpegStdout, err = ffmpeg.StdoutPipe()
+		if err != nil {
+			return
+		}
+
+		err = ffmpeg.Start()
+		if err != nil {
+			return
+		}
+
+		go func() {
+			ps.videoFrameMutex.RLock()
+			frame := make([]byte, len(ps.videoFrame))
+			ps.videoFrameMutex.RUnlock()
+
+			for {
+				n, err := io.ReadFull(ffmpegStdout, frame)
+				if err != nil {
+					break
+				}
+				if n != len(frame) {
+					break
+				}
+
+				ps.videoFrameMutex.Lock()
+				copy(ps.videoFrame, frame)
+				ps.videoFrameMutex.Unlock()
+			}
+		}()
+
+		for {
+			n, err = io.ReadFull(ps.videoSocket, headerBytes)
+			if err != nil {
+				ffmpeg.Process.Kill()
+				ffmpeg.Wait()
+				ffmpeg = nil
+				break
+			}
+			if n != 12 {
+				ffmpeg.Process.Kill()
+				ffmpeg.Wait()
+				ffmpeg = nil
+				break
+			}
+
+			packetSize = int(binary.BigEndian.Uint32(headerBytes[8:]))
+			packet = make([]byte, packetSize)
+
+			n, err = io.ReadFull(ps.videoSocket, packet)
+			if err != nil {
+				ffmpeg.Process.Kill()
+				ffmpeg.Wait()
+				ffmpeg = nil
+				break
+			}
+			if n != packetSize {
+				ffmpeg.Process.Kill()
+				ffmpeg.Wait()
+				ffmpeg = nil
+				break
+			}
+
+			n, err = ffmpegStdin.Write(packet)
+			if err != nil {
+				ps.connectionControlChannel <- false
+				break
+			}
+			if n < packetSize {
+				ps.connectionControlChannel <- false
+				break
+			}
+		}
+	}
+}
+
+func sendVideoFrame(w http.ResponseWriter, req *http.Request, port int) {
+	ps, ok := portMap[port]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	if !config.Ports[port].Video || config.Ports[port].VideoExtension != "" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	ps.videoFrameMutex.RLock()
+	defer ps.videoFrameMutex.RUnlock()
+
+	if len(ps.videoFrame) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	if req.Header.Get("Origin") != "" {
+		w.Header().Set("Access-Control-Expose-Headers", "Device-Name, Width, Height")
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Device-Name", ps.deviceName)
+	w.Header().Set("Width", strconv.Itoa(ps.initialVideoWidth))
+	w.Header().Set("Height", strconv.Itoa(ps.initialVideoHeight))
+	w.Write(ps.videoFrame)
 }
 
 func sendVideoToExtension(port int, ps *portState, extension *extensionState) {

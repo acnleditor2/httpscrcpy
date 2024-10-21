@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,14 +32,20 @@ type portState struct {
 	deviceName                string
 	videoCodec                uint32
 	audioCodec                uint32
-	initialVideoWidth         uint32
-	initialVideoHeight        uint32
+	initialVideoWidth         int
+	initialVideoHeight        int
 	scrcpyServer              *exec.Cmd
 	connectedCommands         [][]string
+	videoFrame                []byte
+	videoFrameMutex           sync.RWMutex
 }
 
 type Port struct {
+	Adb                         []string   `json:"adb"`
+	Ffmpeg                      string     `json:"ffmpeg"`
 	Video                       bool       `json:"video"`
+	VideoStream                 bool       `json:"videoStream"`
+	VideoFrameAlpha             bool       `json:"videoFrameAlpha"`
 	Audio                       bool       `json:"audio"`
 	Control                     bool       `json:"control"`
 	Forward                     bool       `json:"forward"`
@@ -49,7 +56,7 @@ type Port struct {
 	AudioExtension              string     `json:"audioExtension"`
 	ClipboardStreamExtension    string     `json:"clipboardStreamExtension"`
 	UhidKeyboardOutputExtension string     `json:"uhidKeyboardOutputExtension"`
-	Adb                         []string   `json:"adb"`
+	Device                      string     `json:"device"`
 	ScrcpyServer                []string   `json:"scrcpyServer"`
 	ScrcpyServerOptions         []string   `json:"scrcpyServerOptions"`
 	ClipboardAutosync           bool       `json:"clipboardAutosync"`
@@ -67,6 +74,8 @@ type Endpoint struct {
 }
 
 type Config struct {
+	Adb        []string            `json:"adb"`
+	Ffmpeg     string              `json:"ffmpeg"`
 	Address    string              `json:"address"`
 	Static     string              `json:"static"`
 	Cert       string              `json:"cert"`
@@ -233,14 +242,16 @@ func endpointHandler(w http.ResponseWriter, req *http.Request) {
 				if ps.initialVideoWidth == 0 {
 					w.WriteHeader(http.StatusNotFound)
 				} else {
-					w.Write([]byte(strconv.FormatUint(uint64(ps.initialVideoWidth), 10)))
+					w.Write([]byte(strconv.Itoa(ps.initialVideoWidth)))
 				}
 			case "initialVideoHeight":
 				if ps.initialVideoHeight == 0 {
 					w.WriteHeader(http.StatusNotFound)
 				} else {
-					w.Write([]byte(strconv.FormatUint(uint64(ps.initialVideoHeight), 10)))
+					w.Write([]byte(strconv.Itoa(ps.initialVideoHeight)))
 				}
+			case "videoFrame":
+				sendVideoFrame(w, req, port)
 			}
 		}
 	default:
@@ -302,6 +313,10 @@ func main() {
 			clipboardChannel:          make(chan string),
 			uhidKeyboardOutputChannel: make(chan string),
 			connectedCommands:         config.Ports[port].ConnectedCommands,
+		}
+
+		if config.Ports[port].Video && !config.Ports[port].VideoStream && (config.Ports[port].Ffmpeg != "" || config.Ffmpeg != "") && config.Ports[port].VideoExtension == "" {
+			go sendVideoToFfmpeg(port, portMap[port])
 		}
 
 		go func(p int) {
@@ -420,8 +435,8 @@ func main() {
 						}
 
 						ps.videoCodec = binary.BigEndian.Uint32(data[:4])
-						ps.initialVideoWidth = binary.BigEndian.Uint32(data[4:8])
-						ps.initialVideoHeight = binary.BigEndian.Uint32(data[8:])
+						ps.initialVideoWidth = int(binary.BigEndian.Uint32(data[4:8]))
+						ps.initialVideoHeight = int(binary.BigEndian.Uint32(data[8:]))
 					}
 
 					if config.Ports[p].Audio {
@@ -622,7 +637,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		if endpoint.Response != "" && endpoint.Response != "videoStream" && endpoint.Response != "rawVideoStream" && endpoint.Response != "audioStream" && endpoint.Response != "rawAudioStream" && endpoint.Response != "clipboardStream" && endpoint.Response != "uhidKeyboardOutputStream" && endpoint.Response != "clipboard" && endpoint.Response != "deviceName" && endpoint.Response != "videoCodec" && endpoint.Response != "audioCodec" && endpoint.Response != "initialVideoWidth" && endpoint.Response != "initialVideoHeight" {
+		if endpoint.Response != "" && endpoint.Response != "videoStream" && endpoint.Response != "rawVideoStream" && endpoint.Response != "audioStream" && endpoint.Response != "rawAudioStream" && endpoint.Response != "clipboardStream" && endpoint.Response != "uhidKeyboardOutputStream" && endpoint.Response != "clipboard" && endpoint.Response != "deviceName" && endpoint.Response != "videoCodec" && endpoint.Response != "audioCodec" && endpoint.Response != "initialVideoWidth" && endpoint.Response != "initialVideoHeight" && endpoint.Response != "videoFrame" {
 			os.Exit(1)
 		}
 
