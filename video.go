@@ -152,6 +152,7 @@ func sendVideoToFfmpeg(port int, ps *portState) {
 				if config.Ports[port].Ffmpeg != "" {
 					return config.Ports[port].Ffmpeg
 				}
+
 				return config.Ffmpeg
 			}(),
 			"-probesize",
@@ -178,9 +179,9 @@ func sendVideoToFfmpeg(port int, ps *portState) {
 			func() string {
 				if ps.initialVideoWidth >= ps.initialVideoHeight {
 					return "transpose=1:landscape"
-				} else {
-					return "transpose=1:portrait"
 				}
+
+				return "transpose=1:portrait"
 			}(),
 			"-",
 		)
