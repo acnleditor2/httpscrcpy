@@ -27,8 +27,6 @@ type portState struct {
 	audioConnectedChannel     chan struct{}
 	clipboardChannel          chan string
 	uhidKeyboardOutputChannel chan string
-	sendVideoSocket           net.Conn
-	sendAudioSocket           net.Conn
 	deviceName                string
 	videoCodec                uint32
 	audioCodec                uint32
