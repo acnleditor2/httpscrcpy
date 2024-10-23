@@ -86,6 +86,57 @@ type Config struct {
 var portMap = map[int]*portState{}
 var config Config
 
+func list(port int, serverArg string) (string, int) {
+	if len(config.Adb) == 0 && len(config.Ports[port].Adb) == 0 {
+		return "", http.StatusNotFound
+	}
+
+	if len(config.Ports[port].ScrcpyServer) != 2 {
+		return "", http.StatusNotFound
+	}
+
+	var adb []string
+	var args []string
+
+	if len(config.Ports[port].Adb) > 0 {
+		adb = config.Ports[port].Adb
+	} else {
+		adb = config.Adb
+	}
+
+	if config.Ports[port].Device == "usb" {
+		args = append(adb[1:], "-d")
+	} else if config.Ports[port].Device == "tcpip" {
+		args = append(adb[1:], "-e")
+	} else if config.Ports[port].Device != "" {
+		args = append(adb[1:], "-s", config.Ports[port].Device)
+	} else {
+		args = adb[1:]
+	}
+
+	args = append(
+		args,
+		"shell",
+		fmt.Sprintf("CLASSPATH=%s", config.Ports[port].ScrcpyServer[0]),
+		"app_process",
+		"/",
+		"com.genymobile.scrcpy.Server",
+		config.Ports[port].ScrcpyServer[1],
+		serverArg,
+	)
+
+	if !config.Ports[port].Cleanup {
+		args = append(args, "cleanup=false")
+	}
+
+	output, err := exec.Command(adb[0], args...).CombinedOutput()
+	if err != nil {
+		return string(output), http.StatusInternalServerError
+	}
+
+	return string(output), http.StatusOK
+}
+
 func readDummyByte(c net.Conn) bool {
 	data := make([]byte, 1)
 
@@ -250,6 +301,26 @@ func endpointHandler(w http.ResponseWriter, req *http.Request) {
 				}
 			case "videoFrame":
 				sendVideoFrame(w, req, port)
+			case "encoders", "displays", "cameras", "apps":
+				output, status := list(port, fmt.Sprintf("list_%s=true", endpoint.Response))
+
+				if status != http.StatusOK {
+					w.WriteHeader(status)
+				}
+
+				if output != "" {
+					w.Write([]byte(output))
+				}
+			case "cameraSizes":
+				output, status := list(port, "list_camera_sizes=true")
+
+				if status != http.StatusOK {
+					w.WriteHeader(status)
+				}
+
+				if output != "" {
+					w.Write([]byte(output))
+				}
 			}
 		}
 	default:
@@ -642,7 +713,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		if endpoint.Response != "" && endpoint.Response != "videoStream" && endpoint.Response != "rawVideoStream" && endpoint.Response != "audioStream" && endpoint.Response != "rawAudioStream" && endpoint.Response != "clipboardStream" && endpoint.Response != "uhidKeyboardOutputStream" && endpoint.Response != "clipboard" && endpoint.Response != "deviceName" && endpoint.Response != "videoCodec" && endpoint.Response != "audioCodec" && endpoint.Response != "initialVideoWidth" && endpoint.Response != "initialVideoHeight" && endpoint.Response != "videoFrame" {
+		if endpoint.Response != "" && endpoint.Response != "videoStream" && endpoint.Response != "rawVideoStream" && endpoint.Response != "audioStream" && endpoint.Response != "rawAudioStream" && endpoint.Response != "clipboardStream" && endpoint.Response != "uhidKeyboardOutputStream" && endpoint.Response != "clipboard" && endpoint.Response != "deviceName" && endpoint.Response != "videoCodec" && endpoint.Response != "audioCodec" && endpoint.Response != "initialVideoWidth" && endpoint.Response != "initialVideoHeight" && endpoint.Response != "videoFrame" && endpoint.Response != "encoders" && endpoint.Response != "displays" && endpoint.Response != "cameras" && endpoint.Response != "cameraSizes" && endpoint.Response != "apps" {
 			os.Exit(1)
 		}
 
