@@ -331,6 +331,8 @@ func main() {
 			for connect := range ps.connectionControlChannel {
 				if connect {
 					if config.Ports[p].Forward {
+						var connected bool
+
 						for i := 0; i < 100; i++ {
 							if ps.videoSocket != nil {
 								ps.videoSocket.Close()
@@ -381,7 +383,12 @@ func main() {
 								}
 							}
 
+							connected = true
 							break
+						}
+
+						if !connected {
+							continue
 						}
 					} else {
 						if ps.videoSocket != nil {
@@ -605,7 +612,7 @@ func main() {
 					}
 
 					if len(ps.connectedCommands) > 0 {
-						go runCommands(ps, port, ps.connectedCommands)
+						go runCommands(ps, p, ps.connectedCommands)
 					}
 				} else {
 					if ps.videoSocket != nil {
